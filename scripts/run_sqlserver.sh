@@ -68,6 +68,7 @@ docker run -d \
     -e "ACCEPT_EULA=Y" \
     -e "SA_PASSWORD=$SA_PASSWORD" \
     -e "MSSQL_PID=Developer" \
+    -e "MSSQL_AGENT_ENABLED=true" \
     -e "DB_NAME=$DB_NAME" \
     "$IMAGE_NAME"
 
