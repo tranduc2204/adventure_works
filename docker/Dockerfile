@@ -25,8 +25,8 @@ RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt 2>/d
 
 # Copy source data, ingestion script, and entrypoint
 COPY data/ ./data/
-COPY ingests/ingest.py .
-COPY entrypoint.sh .
+COPY src/ingest.py .
+COPY docker/entrypoint.sh ./entrypoint.sh
 
 # Ensure proper permissions
 RUN chmod +x entrypoint.sh && \

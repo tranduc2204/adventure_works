@@ -2,7 +2,9 @@ version: "3.8"
 
 services:
   sqlserver:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     container_name: ${CONTAINER_NAME:-sqlserver_adventureworks}
     ports:
       - "${PORT:-1433}:1433"
@@ -15,6 +17,6 @@ services:
       DB_NAME: "${DB_NAME:-AdventureWorks}"
     volumes:
       - ./data:/usr/src/app/data
-      - ./ingests/ingest.py:/usr/src/app/ingest.py
+      - ./src/ingest.py:/usr/src/app/ingest.py
       - ./.env:/usr/src/app/.env
     restart: unless-stopped

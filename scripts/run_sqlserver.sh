@@ -1,4 +1,4 @@
-#!/usr/bin/env bash           
+#!/usr/bin/env bash
 set -e
 
 # ==============================================================================
@@ -7,16 +7,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Load .env file if present (checks ingests/.env first, then root .env)
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    echo "Loading configuration from: $SCRIPT_DIR/.env"
-    set -a
-    source "$SCRIPT_DIR/.env"
-    set +a
-elif [ -f "$ROOT_DIR/.env" ]; then
+# Load .env file (checks root directory)
+if [ -f "$ROOT_DIR/.env" ]; then
     echo "Loading configuration from: $ROOT_DIR/.env"
     set -a
     source "$ROOT_DIR/.env"
+    set +a
+elif [ -f "$SCRIPT_DIR/.env" ]; then
+    echo "Loading configuration from: $SCRIPT_DIR/.env"
+    set -a
+    source "$SCRIPT_DIR/.env"
     set +a
 else
     echo "ERROR: File .env not found! Please create .env from .env.example"
@@ -35,13 +35,9 @@ CONTAINER_NAME="${CONTAINER_NAME:-sqlserver_adventureworks}"
 PORT="${PORT:-1433}"
 DB_NAME="${DB_NAME:-AdventureWorks}"
 IMAGE_NAME="${IMAGE_NAME:-adventureworks-sqlserver}"
-
-# Auto-detect data directory
-if [ -d "$ROOT_DIR/data" ]; then
-    DATA_DIR="$ROOT_DIR/data"
-else
-    DATA_DIR="$SCRIPT_DIR/data"
-fi
+DATA_DIR="$ROOT_DIR/data"
+INGEST_SCRIPT="$ROOT_DIR/src/ingest.py"
+DOCKERFILE="$ROOT_DIR/docker/Dockerfile"
 
 echo "================================================================"
 echo " Starting SQL Server & Data Ingestion Setup"
@@ -49,6 +45,8 @@ echo " Container Name: $CONTAINER_NAME"
 echo " Port:           $PORT"
 echo " Database:       $DB_NAME"
 echo " Data Dir:       $DATA_DIR"
+echo " Ingest Script:  $INGEST_SCRIPT"
+echo " Dockerfile:     $DOCKERFILE"
 echo "================================================================"
 
 # Step 1: Remove existing container if running
@@ -57,10 +55,10 @@ if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 fi
 
-# Step 2: Build Docker Image or Run Container
+# Step 2: Build Docker Image and Run Container
 echo ""
 echo "--- Step 1: Building Docker Image ---"
-docker build -t "$IMAGE_NAME" "$ROOT_DIR"
+docker build -f "$DOCKERFILE" -t "$IMAGE_NAME" "$ROOT_DIR"
 
 echo ""
 echo "--- Step 2: Starting Container ---"
@@ -78,7 +76,7 @@ echo ""
 echo "--- Step 3: Copying Source Data and Ingest Script to Container ---"
 docker exec "$CONTAINER_NAME" mkdir -p /usr/src/app/data
 docker cp "$DATA_DIR/." "$CONTAINER_NAME:/usr/src/app/data/"
-docker cp "$SCRIPT_DIR/ingest.py" "$CONTAINER_NAME:/usr/src/app/ingest.py"
+docker cp "$INGEST_SCRIPT" "$CONTAINER_NAME:/usr/src/app/ingest.py"
 echo "Successfully copied source data and ingest.py into container."
 
 # Step 4: Wait for SQL Server to be healthy
@@ -110,16 +108,7 @@ echo ""
 echo "--- Step 5: Running Ingestion (CSV -> SQL Server) ---"
 if [ -f "$ROOT_DIR/venv/bin/python" ]; then
     echo "Running ingest.py using host venv against localhost:$PORT..."
-    "$ROOT_DIR/venv/bin/python" "$SCRIPT_DIR/ingest.py" \
-        --host localhost \
-        --port "$PORT" \
-        --user sa \
-        --password "$SA_PASSWORD" \
-        --database "$DB_NAME" \
-        --data-dir "$DATA_DIR"
-elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
-    echo "Running ingest.py using local venv against localhost:$PORT..."
-    "$SCRIPT_DIR/venv/bin/python" "$SCRIPT_DIR/ingest.py" \
+    "$ROOT_DIR/venv/bin/python" "$INGEST_SCRIPT" \
         --host localhost \
         --port "$PORT" \
         --user sa \
