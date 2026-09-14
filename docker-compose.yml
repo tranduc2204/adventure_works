@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  sqlserver:
+    build: .
+    container_name: ${CONTAINER_NAME:-sqlserver_adventureworks}
+    ports:
+      - "${PORT:-1433}:1433"
+    env_file:
+      - .env
+    environment:
+      ACCEPT_EULA: "${ACCEPT_EULA:-Y}"
+      SA_PASSWORD: "${SA_PASSWORD}"
+      MSSQL_PID: "${MSSQL_PID:-Developer}"
+      DB_NAME: "${DB_NAME:-AdventureWorks}"
+    volumes:
+      - ./data:/usr/src/app/data
+      - ./ingests/ingest.py:/usr/src/app/ingest.py
+      - ./.env:/usr/src/app/.env
+    restart: unless-stopped
