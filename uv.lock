@@ -27,6 +27,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "airflow-dbt" },
+    { name = "cryptography" },
     { name = "dbt-autofix" },
     { name = "dbt-core" },
     { name = "dbt-snowflake" },
@@ -34,12 +35,14 @@ dependencies = [
     { name = "pandas" },
     { name = "pymssql" },
     { name = "python-dotenv" },
+    { name = "snowflake" },
     { name = "sqlalchemy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "airflow-dbt", specifier = "~=0.4.0" },
+    { name = "cryptography", specifier = "~=50.0.1" },
     { name = "dbt-autofix", specifier = "~=0.18.0" },
     { name = "dbt-core", specifier = "~=1.11.0" },
     { name = "dbt-snowflake", specifier = "~=1.11.0" },
@@ -47,6 +50,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pymssql", specifier = ">=2.3.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "snowflake", specifier = "~=1.13.1" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
 ]
 
@@ -2970,6 +2974,19 @@ wheels = [
 ]
 
 [[package]]
+name = "snowflake"
+version = "1.13.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "snowflake-core" },
+    { name = "snowflake-legacy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/47/4eeee2d2564e0de814c3f045d220df8983ba51d003fd0906035a69227775/snowflake-1.13.1.tar.gz", hash = "sha256:59291b0a93f3b98ba1dc6a1153bfcab1f4ba75dbd84a3abcad391e5d38ddb1f4", size = 6204, upload-time = "2026-08-12T07:52:30.677Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/67/035de3cb8411b1212443a5c39ff65202f45bf5bb91c71399b938c9d65b84/snowflake-1.13.1-py3-none-any.whl", hash = "sha256:6c62480f9b925119ecc4d29a48af3c0d52e1c08562b06105e239e20908a0afd6", size = 5645, upload-time = "2026-08-12T07:52:31.597Z" },
+]
+
+[[package]]
 name = "snowflake-connector-python"
 version = "4.7.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3014,6 +3031,35 @@ wheels = [
 [package.optional-dependencies]
 secure-local-storage = [
     { name = "keyring" },
+]
+
+[[package]]
+name = "snowflake-core"
+version = "1.13.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "snowflake-connector-python" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/28/a52204137835c0cdf92410245aa629e07301e5aaf0ee0fbe5a7b2c2c38eb/snowflake_core-1.13.1.tar.gz", hash = "sha256:9f07aa40f77f1e302f18812487afafd49f7fd2b49392ea03f115bc5ab6cb0015", size = 1127388, upload-time = "2026-08-12T07:52:35.592Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/41/4d/e997d69e94c453dc6175d63ed2625cf34ee66ce729cbd53e43e720fed01d/snowflake_core-1.13.1-py3-none-any.whl", hash = "sha256:6c2e18d4d5648ef68b19783e1aee078c85310581621e061f5f2671d34150e320", size = 1892381, upload-time = "2026-08-12T07:52:33.325Z" },
+]
+
+[[package]]
+name = "snowflake-legacy"
+version = "1.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/f1/95e11303ef08c9a2e71f58c7f3d12578c7c82e8dfc0cf9f04531c07b19b8/snowflake_legacy-1.0.3.tar.gz", hash = "sha256:681ecb997ba24ee01de1525e2105e214c76f277470074179379fabc1fe5d4bc0", size = 4084, upload-time = "2026-08-10T16:14:00.051Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/be/88339b2ee7d81b8a8b0ae22cb29d0512080aa46794878ecf5bea21f2943a/snowflake_legacy-1.0.3-py3-none-any.whl", hash = "sha256:637b8606266300b7630e2a9edad53308c7e14b7e76861d2dee30f50167c4b791", size = 3061, upload-time = "2026-08-10T16:14:00.879Z" },
 ]
 
 [[package]]

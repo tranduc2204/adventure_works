@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "airflow-dbt~=0.4.0",
+    "cryptography~=50.0.1",
     "dbt-autofix~=0.18.0",
     "dbt-core~=1.11.0",
     "dbt-snowflake~=1.11.0",
@@ -16,6 +17,7 @@ dependencies = [
     "pandas>=2.0.0",
     "pymssql>=2.3.0",
     "python-dotenv>=1.0.0",
+    "snowflake~=1.13.1",
     "sqlalchemy>=2.0.0",
 ]
 
