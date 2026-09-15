@@ -1,0 +1,10 @@
+first run docker chạy bash để fake nguồn sql
+
+sau đó chạy dlt init chess snowflake
+nếu clone new project cần chạy thêm
+dlt init chess snowflake
+để cấu hình profile 
+https://dlthub.com/docs/dlt-ecosystem/destinations/snowflake
+
+
+

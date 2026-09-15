@@ -10,3 +10,13 @@ __pycache__/
 # Data & OS
 .DS_Store
 
+# blur private key and public key
+rsa_key.p8
+rsa_key.pub
+
+
+
+#dlt
+.dlt
+__init__.py
+chess
