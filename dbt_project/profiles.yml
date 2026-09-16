@@ -1,0 +1,13 @@
+dbt_project:
+  outputs:
+    dev:
+      type: snowflake
+      account: xaubpkk-dh32892
+      user: DBT
+      role: TRANSFORM
+      private_key_path: /home/dustin/Desktop/DataEngineer/adventure_works/rsa_key.p8
+      database: ADVENTUREWORKS
+      schema: BRONZE
+      threads: 1
+      warehouse: COMPUTE_WH
+  target: dev
