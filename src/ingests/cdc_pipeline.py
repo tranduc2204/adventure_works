@@ -7,6 +7,10 @@ import dlt
 from dlt.sources.sql_database import sql_database
 import urllib.parse
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 DB_USER = os.getenv("DB_USER", "sa")
 DB_PASS = urllib.parse.quote_plus(os.getenv("SA_PASSWORD", "Radeon@2204"))
@@ -47,7 +51,7 @@ def run_cdc_sync():
     for table_name in CDC_TABLES:
         source.resources[table_name].apply_hints(
             incremental=dlt.sources.incremental(
-                "__$start_lsn",
+                '"__$start_lsn"',
                 initial_value=b"\x00" * 10  # Starts from zero or your checkpoint LSN
             )
         )
