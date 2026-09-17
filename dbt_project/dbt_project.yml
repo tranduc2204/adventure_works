@@ -41,4 +41,3 @@ models:
       +schema: SILVER
     src:
       +materialized: view
-      +schema: BRONZE_STAGING

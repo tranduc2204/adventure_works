@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Enable Change Data Capture (CDC) for AdventureWorks
--- Specifically configured for 'products' and 'sales' tables
+-- Specifically configured for 'sales' table
 -- ==============================================================================
 
 USE AdventureWorks;
@@ -21,20 +21,6 @@ GO
 
 -- 2. Ensure Primary Keys on tables (required for CDC net changes)
 
--- products
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_products')
-BEGIN
-    PRINT 'Setting product_key to NOT NULL...';
-    ALTER TABLE [dbo].[products] ALTER COLUMN [product_key] BIGINT NOT NULL;
-END
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_products')
-BEGIN
-    PRINT 'Adding Primary Key constraint PK_products...';
-    ALTER TABLE [dbo].[products] ADD CONSTRAINT PK_products PRIMARY KEY ([product_key]);
-END
-GO
 
 -- sales
 IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_sales')
@@ -65,7 +51,6 @@ GO
 -- 3. Enable CDC for each target table
 DECLARE @tables TABLE (table_name NVARCHAR(100));
 INSERT INTO @tables VALUES 
-    ('products'),
     ('sales');
 
 DECLARE @tbl NVARCHAR(100);
@@ -112,6 +97,6 @@ FROM sys.tables t
 JOIN sys.schemas s ON t.schema_id = s.schema_id
 LEFT JOIN cdc.change_tables c ON c.source_object_id = t.object_id
 LEFT JOIN sys.tables ct ON c.capture_instance = ct.name
-WHERE s.name = 'dbo' AND t.name IN ('products', 'sales')
+WHERE s.name = 'dbo' AND t.name IN ( 'sales')
 ORDER BY t.name;
 GO

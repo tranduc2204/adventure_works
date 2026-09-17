@@ -96,9 +96,9 @@ def main():
             else:
                 print(f"   -> {pk_name} already exists.")
 
-        # Step 3: Enable CDC on Tables
+        # Step 3: Enable CDC on Tables (Sales only)
         print("\n3. Enabling CDC on tables...")
-        for table in PRIMARY_KEYS.keys():
+        for table in ["sales"]:
             is_tbl_cdc = conn.execute(
                 text("SELECT is_tracked_by_cdc FROM sys.tables WHERE name = :name"),
                 {"name": table},

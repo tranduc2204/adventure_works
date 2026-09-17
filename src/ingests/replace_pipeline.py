@@ -18,12 +18,13 @@ SQL_ALCHEMY_URL = f"mssql+pymssql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_
 
 
 REPLACE_TABLE = [
-    "territories", 
+    "calendar",
+    "customers",
+    "products",
     "product_categories",
     "product_subcategories",
-    "products",
-    "calendar",
-    "returns"
+    "returns",
+    "territories",
 ]
 
 def run_replace_sync():
