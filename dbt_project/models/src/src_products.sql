@@ -1,8 +1,4 @@
-{{ config(
-    materialized='table',
-    schema='src',
-    alias='src_products')
-}}
+
 with raw_products as (
     select 
         *
