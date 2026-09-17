@@ -20,13 +20,13 @@ GO
 
 -- 2. Ensure Primary Keys on all tables (required for CDC net changes)
 
--- calendar
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_calendar')
-BEGIN
-    ALTER TABLE [calendar] ALTER COLUMN [date] DATETIME NOT NULL;
-    ALTER TABLE [calendar] ADD CONSTRAINT PK_calendar PRIMARY KEY ([date]);
-END
-GO
+-- -- calendar
+-- IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_calendar')
+-- BEGIN
+--     ALTER TABLE [calendar] ALTER COLUMN [date] DATETIME NOT NULL;
+--     ALTER TABLE [calendar] ADD CONSTRAINT PK_calendar PRIMARY KEY ([date]);
+-- END
+-- GO
 
 -- customers
 IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_customers')
@@ -36,47 +36,47 @@ BEGIN
 END
 GO
 
--- product_categories
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_product_categories')
-BEGIN
-    ALTER TABLE [product_categories] ALTER COLUMN [product_category_key] BIGINT NOT NULL;
-    ALTER TABLE [product_categories] ADD CONSTRAINT PK_product_categories PRIMARY KEY ([product_category_key]);
-END
-GO
+-- -- product_categories
+-- IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_product_categories')
+-- BEGIN
+--     ALTER TABLE [product_categories] ALTER COLUMN [product_category_key] BIGINT NOT NULL;
+--     ALTER TABLE [product_categories] ADD CONSTRAINT PK_product_categories PRIMARY KEY ([product_category_key]);
+-- END
+-- GO
 
--- product_subcategories
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_product_subcategories')
-BEGIN
-    ALTER TABLE [product_subcategories] ALTER COLUMN [product_subcategory_key] BIGINT NOT NULL;
-    ALTER TABLE [product_subcategories] ADD CONSTRAINT PK_product_subcategories PRIMARY KEY ([product_subcategory_key]);
-END
-GO
+-- -- product_subcategories
+-- IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_product_subcategories')
+-- BEGIN
+--     ALTER TABLE [product_subcategories] ALTER COLUMN [product_subcategory_key] BIGINT NOT NULL;
+--     ALTER TABLE [product_subcategories] ADD CONSTRAINT PK_product_subcategories PRIMARY KEY ([product_subcategory_key]);
+-- END
+-- GO
 
--- products
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_products')
-BEGIN
-    ALTER TABLE [products] ALTER COLUMN [product_key] BIGINT NOT NULL;
-    ALTER TABLE [products] ADD CONSTRAINT PK_products PRIMARY KEY ([product_key]);
-END
-GO
+-- -- products
+-- IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_products')
+-- BEGIN
+--     ALTER TABLE [products] ALTER COLUMN [product_key] BIGINT NOT NULL;
+--     ALTER TABLE [products] ADD CONSTRAINT PK_products PRIMARY KEY ([product_key]);
+-- END
+-- GO
 
--- territories
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_territories')
-BEGIN
-    ALTER TABLE [territories] ALTER COLUMN [sales_territory_key] BIGINT NOT NULL;
-    ALTER TABLE [territories] ADD CONSTRAINT PK_territories PRIMARY KEY ([sales_territory_key]);
-END
-GO
+-- -- territories
+-- IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_territories')
+-- BEGIN
+--     ALTER TABLE [territories] ALTER COLUMN [sales_territory_key] BIGINT NOT NULL;
+--     ALTER TABLE [territories] ADD CONSTRAINT PK_territories PRIMARY KEY ([sales_territory_key]);
+-- END
+-- GO
 
--- returns
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_returns')
-BEGIN
-    ALTER TABLE [returns] ALTER COLUMN [return_date] DATETIME NOT NULL;
-    ALTER TABLE [returns] ALTER COLUMN [territory_key] BIGINT NOT NULL;
-    ALTER TABLE [returns] ALTER COLUMN [product_key] BIGINT NOT NULL;
-    ALTER TABLE [returns] ADD CONSTRAINT PK_returns PRIMARY KEY ([return_date], [territory_key], [product_key]);
-END
-GO
+-- -- returns
+-- IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_returns')
+-- BEGIN
+--     ALTER TABLE [returns] ALTER COLUMN [return_date] DATETIME NOT NULL;
+--     ALTER TABLE [returns] ALTER COLUMN [territory_key] BIGINT NOT NULL;
+--     ALTER TABLE [returns] ALTER COLUMN [product_key] BIGINT NOT NULL;
+--     ALTER TABLE [returns] ADD CONSTRAINT PK_returns PRIMARY KEY ([return_date], [territory_key], [product_key]);
+-- END
+-- GO
 
 -- sales
 IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_sales')
@@ -90,14 +90,14 @@ GO
 -- 3. Enable CDC for each table
 DECLARE @tables TABLE (table_name NVARCHAR(100));
 INSERT INTO @tables VALUES 
-    ('calendar'),
+    -- ('calendar'),
     ('customers'),
-    ('product_categories'),
-    ('product_subcategories'),
-    ('products'),
-    ('returns'),
-    ('sales'),
-    ('territories');
+    -- ('product_categories'),
+    -- ('product_subcategories'),
+    -- ('products'),
+    -- ('returns'),
+    ('sales');
+    -- ('territories');
 
 DECLARE @tbl NVARCHAR(100);
 DECLARE cur CURSOR FOR SELECT table_name FROM @tables;

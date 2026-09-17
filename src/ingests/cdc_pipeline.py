@@ -22,14 +22,8 @@ SQL_ALCHEMY_URL = f"mssql+pymssql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_
 
 # List of CDC change tables
 CDC_TABLES = [
-    "dbo_calendar_CT",
     "dbo_customers_CT",
-    "dbo_product_categories_CT",
-    "dbo_product_subcategories_CT",
-    "dbo_products_CT",
-    "dbo_returns_CT",
     "dbo_sales_CT",
-    "dbo_territories_CT"
 ]
 
 
