@@ -1,31 +1,31 @@
 # AdventureWorks End-to-End Modern Data Platform
-> **Kiến trúc Data Platform toàn diện:** Giả lập hệ thống OLTP trên SQL Server &rarr; CDC Streaming & Batch Ingestion với DLT &rarr; Snowflake Data Cloud &rarr; Data Transformation & Modeling với dbt Core (Star Schema / Medallion Architecture).
+> **Enterprise Data Platform:** Simulated OLTP on SQL Server &rarr; CDC Streaming & Batch Ingestion with DLT &rarr; Snowflake Data Cloud &rarr; Data Transformation & Modeling with dbt Core (Star Schema / Medallion Architecture).
 
 ---
 
-## 1. Kiến trúc luồng dữ liệu tổng thể (End-to-End Pipeline)
+## 1. End-to-End Architecture Overview
 
 ```mermaid
 flowchart TB
-    subgraph S1 ["1. HỆ THỐNG NGUỒN OLTP (Docker SQL Server 2022)"]
+    subgraph S1 ["1. OLTP SOURCE SYSTEM (Dockerized SQL Server 2022)"]
         direction TB
-        CSV["8 File CSV Nguồn\n(Thư mục data/)"]
+        CSV["8 Source CSV Files\n(data/ directory)"]
         Ingest["ingest.py\n(Batch Ingestion / SQLAlchemy)"]
-        SQL_DB["Database AdventureWorks\n(Schema: dbo)"]
+        SQL_DB["AdventureWorks Database\n(dbo schema)"]
         Agent["SQL Server Agent\n(Capture Job)"]
-        CDC_Log["Bảng CDC Change Table\n(cdc.dbo_sales_CT)"]
+        CDC_Log["CDC Change Table\n(cdc.dbo_sales_CT)"]
 
         CSV --> Ingest
-        Ingest -->|Nạp dữ liệu| SQL_DB
-        SQL_DB -->|Ghi Transaction Log| Agent
-        Agent -->|Bắt biến động Insert/Update/Delete| CDC_Log
+        Ingest -->|Data Load| SQL_DB
+        SQL_DB -->|Transaction Log| Agent
+        Agent -->|Captures Insert / Update / Delete| CDC_Log
     end
 
-    subgraph S2 ["2. TẦNG DATA INGESTION (dlt - data load tool)"]
+    subgraph S2 ["2. DATA INGESTION LAYER (dlt - data load tool)"]
         direction TB
         DLT_Init["initial_snapshot.py\n(Baseline Full Sync: dbo -> BRONZE)"]
-        DLT_Rep["replace_pipeline.py\n(Full Replace 7 bảng Dimensions)"]
-        DLT_CDC["cdc_pipeline.py\n(Incremental Stream CDC theo LSN: Append)"]
+        DLT_Rep["replace_pipeline.py\n(Full Replace for Dimensions)"]
+        DLT_CDC["cdc_pipeline.py\n(Incremental CDC Stream by LSN: Append)"]
     end
 
     SQL_DB --> DLT_Init
@@ -35,25 +35,25 @@ flowchart TB
     subgraph S3 ["3. DATA WAREHOUSE (Snowflake Data Cloud)"]
         direction TB
         
-        subgraph BronzeLayer ["BRONZE SCHEMA (Raw Data & Append-only Logs)"]
+        subgraph BronzeLayer ["BRONZE SCHEMA (Raw Tables & Append-only Logs)"]
             B_Dim["SALES, CUSTOMERS, PRODUCTS,\nCALENDAR, TERRITORIES, RETURNS,\nPRODUCT_CATEGORIES, PRODUCT_SUBCATEGORIES"]
-            B_CDC["DBO_SALES_CT\n(Raw CDC stream kèm LSN & Operation code)"]
+            B_CDC["DBO_SALES_CT\n(Raw CDC event stream with LSN & Operation codes)"]
         end
 
         subgraph StagingLayer ["BRONZE_STAGING SCHEMA (dbt Staging & Snapshots)"]
-            S_Src["12 Staging Views (src_*.sql)\nLàm sạch, ép kiểu dữ liệu"]
-            S_CDC["src_cdc_sales.sql\nDeduplicate qua ROW_NUMBER() lấy trạng thái mới nhất"]
-            S_Snap["snap_products (SCD Type 2)\nLưu lịch sử biến động giá qua thời gian"]
+            S_Src["12 Staging Views (src_*.sql)\nData cleaning & type casting"]
+            S_CDC["src_cdc_sales.sql\nDeduplication via ROW_NUMBER() to get latest state"]
+            S_Snap["snap_products (SCD Type 2)\nTracks historical price & cost changes"]
         end
 
         subgraph GoldLayer ["GOLD SCHEMA (Core Dimensional Modeling - Star Schema)"]
-            D_Cust["dim_customers\n(Hồ sơ khách hàng, Date of Birth)"]
-            D_Prod["dim_products\n(Làm phẳng danh mục, chuẩn hóa Size/Style)"]
-            D_Cal["dim_calendar\n(Bộ lịch đa chiều, Smart Date Key)"]
-            D_Terr["dim_territories\n(Khu vực bán hàng, territory_key)"]
+            D_Cust["dim_customers\n(Customer demographics, birth_date)"]
+            D_Prod["dim_products\n(Flattened categories, normalized size & style)"]
+            D_Cal["dim_calendar\n(Rich calendar hierarchy, Smart Date Key)"]
+            D_Terr["dim_territories\n(Sales geographic dimensions, territory_key)"]
             
             F_Sales["fct_sales\n(Incremental Merge Fact: 1 PK = 1 Row)"]
-            F_Ret["fct_returns\n(Fact Đổi trả hàng)"]
+            F_Ret["fct_returns\n(Product returns fact)"]
         end
 
         BronzeLayer --> StagingLayer
@@ -64,8 +64,8 @@ flowchart TB
     DLT_Rep -->|write_disposition: replace| B_Dim
     DLT_CDC -->|write_disposition: append| B_CDC
 
-    subgraph S4 ["4. ANALYTICS & BI (Reporting Ready)"]
-        BI["Power BI / Tableau / Metabase\n• Dashboard Doanh thu & Tăng trưởng MoM/YoY\n• Phân tích Tỷ lệ Trả hàng (Return Rate)\n• Phân khúc khách hàng theo nhân khẩu học"]
+    subgraph S4 ["4. ANALYTICS & BUSINESS INTELLIGENCE"]
+        BI["Power BI / Tableau / Metabase\n• Revenue & Growth Trends (MoM, YoY)\n• Return Rate Analysis by Product & Region\n• Customer Segmentation by Demographics"]
     end
 
     GoldLayer --> BI
@@ -73,141 +73,142 @@ flowchart TB
 
 ---
 
-## 2. Cấu trúc thư mục dự án (Clean Architecture)
+## 2. Project Directory Structure
 
 ```
 adventure_works/
-├── data/                            # 8 file CSV nguồn
-│   ├── calendar.csv                 # Lịch ngày tháng (911 dòng)
-│   ├── customers.csv                # Khách hàng (18,148 dòng)
-│   ├── product_categories.csv       # Nhóm sản phẩm (4 dòng)
-│   ├── product_subcategories.csv    # Phân loại sản phẩm (37 dòng)
-│   ├── products.csv                 # Sản phẩm (293 dòng)
-│   ├── returns.csv                  # Dữ liệu trả hàng (1,809 dòng)
-│   ├── sales.csv                    # Đơn hàng lịch sử (23,935 dòng)
-│   └── territories.csv              # Khu vực bán hàng (10 dòng)
-├── docker/                          # Hạ tầng Docker
-│   ├── Dockerfile                   # Image SQL Server 2022 + Python runtime
-│   └── entrypoint.sh                # Script khởi động SQL Server và nạp data tự động
+├── data/                            # 8 Source CSV files
+│   ├── calendar.csv                 # Calendar dates (911 rows)
+│   ├── customers.csv                # Customer profiles (18,148 rows)
+│   ├── product_categories.csv       # High-level product categories (4 rows)
+│   ├── product_subcategories.csv    # Detailed product subcategories (37 rows)
+│   ├── products.csv                 # Product catalog & pricing (293 rows)
+│   ├── returns.csv                  # Return transactions (1,809 rows)
+│   ├── sales.csv                    # Historical sales orders (23,935 rows)
+│   └── territories.csv              # Geographic sales territories (10 rows)
+├── docker/                          # Docker infrastructure
+│   ├── Dockerfile                   # Custom SQL Server 2022 image with Python runtime
+│   └── entrypoint.sh                # Container startup and automated ingestion script
 ├── scripts/
-│   └── run_sqlserver.sh             # Script 1-click tự động dựng container và nạp data
-├── src/                             # Mã nguồn Python Ingestion & CDC
-│   ├── ingest.py                    # Nạp 8 file CSV vào SQL Server
-│   ├── enable_cdc.py                # Bật SQL Server CDC trên database & bảng sales
-│   └── ingests/                     # Các pipeline nạp dữ liệu DLT
-│       ├── initial_snapshot.py      # Baseline sync ban đầu 8 bảng vào Snowflake Bronze
-│       ├── replace_pipeline.py      # Full replace sync cho các bảng ít biến động
-│       ├── cdc_pipeline.py          # Incremental sync bắt CDC log theo LSN vào Bronze
-│       ├── test_conn.py             # Kiểm tra kết nối Snowflake
-│       └── test_conn_sqlserver.py   # Kiểm tra kết nối SQL Server
-├── dbt_project/                     # Dự án dbt Core (Transform & Modeling)
-│   ├── dbt_project.yml              # Cấu hình dự án & schema chỉ định
-│   ├── profiles.yml                 # Cấu hình kết nối Snowflake (RSA Key-Pair)
+│   └── run_sqlserver.sh             # 1-click script to build and launch SQL Server container
+├── src/                             # Ingestion & CDC Python source code
+│   ├── ingest.py                    # Ingests 8 CSVs into SQL Server database
+│   ├── enable_cdc.py                # Enables SQL Server CDC on database & sales table
+│   └── ingests/                     # dlt (data load tool) pipelines
+│       ├── initial_snapshot.py      # Full baseline ingestion of 8 tables into Snowflake Bronze
+│       ├── replace_pipeline.py      # Periodic full replace sync for dimension tables
+│       ├── cdc_pipeline.py          # Incremental CDC stream sync by LSN into Bronze
+│       ├── test_conn.py             # Snowflake connection health check
+│       └── test_conn_sqlserver.py   # SQL Server connection health check
+├── dbt_project/                     # dbt Core project (Transformation & Modeling)
+│   ├── dbt_project.yml              # Project configuration & schema definitions
+│   ├── profiles.yml                 # Snowflake connection config (RSA Key-Pair Auth)
 │   ├── macros/
-│   │   └── generate_schema_name.sql # Macro ghi đè tên schema chuẩn xác
+│   │   └── generate_schema_name.sql # Custom schema name resolution macro
 │   ├── models/
-│   │   ├── sources.yml              # Khai báo các bảng nguồn từ Snowflake BRONZE
-│   │   ├── schema.yml               # 30 bài kiểm thử Data Tests & tài liệu cột
-│   │   ├── src/                     # [TẦNG STAGING - BRONZE_STAGING]
+│   │   ├── sources.yml              # Declaration of Snowflake BRONZE source tables
+│   │   ├── schema.yml               # 30 automated data tests & column documentation
+│   │   ├── src/                     # [STAGING LAYER - BRONZE_STAGING SCHEMA]
 │   │   │   ├── src_calendar.sql
 │   │   │   ├── src_customers.sql
 │   │   │   ├── src_product_categories.sql
 │   │   │   ├── src_product_subcategories.sql
 │   │   │   ├── src_products.sql
 │   │   │   ├── src_returns.sql
-│   │   │   ├── src_sales.sql        # Baseline staging cho sales
-│   │   │   ├── src_cdc_sales.sql    # Deduplicate CDC stream theo LSN
+│   │   │   ├── src_sales.sql        # Baseline staging for historical sales
+│   │   │   ├── src_cdc_sales.sql    # CDC log deduplication by LSN
 │   │   │   ├── src_territories.sql
 │   │   │   ├── src__dlt_loads.sql
 │   │   │   ├── src__dlt_pipeline_state.sql
 │   │   │   └── src__dlt_version.sql
-│   │   ├── dim/                     # [TẦNG GOLD - DIMENSIONS]
-│   │   │   ├── dim_calendar.sql     # Bộ lịch đa chiều (Date Key, Năm, Quý, Tháng, Thứ)
-│   │   │   ├── dim_customers.sql    # Khách hàng (Date of Birth, chuẩn hóa kiểu)
-│   │   │   ├── dim_products.sql     # Làm phẳng danh mục, chuẩn hóa Size & Style
-│   │   │   └── dim_territories.sql  # Khu vực địa lý bán hàng
-│   │   └── fct/                     # [TẦNG GOLD - FACTS]
-│   │       ├── fct_sales.sql        # Incremental Merge Fact (kết hợp baseline + CDC)
-│   │       └── fct_returns.sql      # Fact giao dịch trả hàng
+│   │   ├── dim/                     # [GOLD LAYER - DIMENSIONS]
+│   │   │   ├── dim_calendar.sql     # Rich date dimension (Date Key, Year, Quarter, Month, Weekday)
+│   │   │   ├── dim_customers.sql    # Cleaned customer profiles, birth_date
+│   │   │   ├── dim_products.sql     # Flattened product catalog, normalized size & style
+│   │   │   └── dim_territories.sql  # Geographic sales territory dimension
+│   │   └── fct/                     # [GOLD LAYER - FACTS]
+│   │       ├── fct_sales.sql        # Incremental Merge Fact (combining baseline + CDC events)
+│   │       └── fct_returns.sql      # Product returns fact table
 │   └── snapshots/
-│       └── snap_products.sql        # SCD Type 2 theo dõi biến động giá sản phẩm
+│       └── snap_products.sql        # SCD Type 2 snapshot tracking price & cost history
 ├── set_up_sql/
-│   └── create_role_ingest.sql       # Script khởi tạo Role/User/Database trên Snowflake
-├── .dlt/                            # Cấu hình DLT
+│   └── create_role_ingest.sql       # Snowflake setup script (Roles, Users, Privileges)
+├── .dlt/                            # dlt framework configuration
 │   ├── config.toml
-│   └── secrets.toml                 # Thông tin đăng nhập bảo mật DLT
+│   └── secrets.toml                 # Encrypted credentials for Snowflake & SQL Server
 ├── docker-compose.yml
 ├── requirements.txt
-├── rsa_key.p8                       # Private key kết nối Snowflake (Key-Pair Auth)
-├── rsa_key.pub                      # Public key gán cho Snowflake user
-└── .env                             # Biến môi trường local
+├── rsa_key.p8                       # Snowflake private key (Key-Pair Authentication)
+├── rsa_key.pub                      # Snowflake public key
+└── .env                             # Local environment variables
 ```
 
 ---
 
-## 3. Giai đoạn 1: Giả lập hệ thống OLTP (SQL Server 2022 trên Docker)
+## 3. Phase 1: OLTP System Simulation (SQL Server 2022 on Docker)
 
-Hệ thống sử dụng Docker để chạy container **SQL Server 2022**, đóng vai trò là cơ sở dữ liệu giao dịch (OLTP / ERP) của doanh nghiệp:
+The project simulates an enterprise transactional database (OLTP / ERP) using **SQL Server 2022** running inside Docker:
 
-### 3.1. Danh sách Dataset và ánh xạ bảng nguồn (`src/ingest.py`)
+### 3.1. Source Datasets & Table Mappings (`src/ingest.py`)
 
-| File nguồn (`data/`) | Bảng đích SQL Server | Số dòng | Cột kiểu ngày (`DATETIME`) | Ý nghĩa nghiệp vụ |
+| Source CSV (`data/`) | Target SQL Server Table | Record Count | Date Columns (`DATETIME`) | Business Description |
 | :--- | :--- | :---: | :--- | :--- |
-| `calendar.csv` | `dbo.calendar` | 911 | `date` | Danh mục ngày tháng phục vụ phân tích |
-| `customers.csv` | `dbo.customers` | 18,148 | `birth_date` | Hồ sơ khách hàng |
-| `product_categories.csv` | `dbo.product_categories` | 4 | - | Nhóm sản phẩm cấp cao nhất |
-| `product_subcategories.csv` | `dbo.product_subcategories` | 37 | - | Phân loại sản phẩm chi tiết |
-| `products.csv` | `dbo.products` | 293 | - | Danh mục chi tiết sản phẩm và giá bán |
-| `returns.csv` | `dbo.returns` | 1,809 | `return_date` | Sự kiện khách trả lại hàng |
-| `sales.csv` | `dbo.sales` | 23,935 | `order_date`, `stock_date` | Giao dịch đơn hàng bán |
-| `territories.csv` | `dbo.territories` | 10 | - | Khu vực địa lý thị trường |
+| `calendar.csv` | `dbo.calendar` | 911 | `date` | Reference calendar dates |
+| `customers.csv` | `dbo.customers` | 18,148 | `birth_date` | Customer demographic records |
+| `product_categories.csv` | `dbo.product_categories` | 4 | - | Top-level product category classifications |
+| `product_subcategories.csv` | `dbo.product_subcategories` | 37 | - | Granular product subcategories |
+| `products.csv` | `dbo.products` | 293 | - | Complete product catalog and pricing |
+| `returns.csv` | `dbo.returns` | 1,809 | `return_date` | Product return transactions |
+| `sales.csv` | `dbo.sales` | 23,935 | `order_date`, `stock_date` | Historical order line-item transactions |
+| `territories.csv` | `dbo.territories` | 10 | - | Geographic sales regions & countries |
 
-### 3.2. Cơ chế nạp dữ liệu:
-1. `wait_for_sql_server`: Thăm dò kết nối tới cổng `1433` cho đến khi SQL Server sẵn sàng nhận lệnh.
-2. `ensure_database`: Tự động khởi tạo database `AdventureWorks`.
-3. Chuẩn hóa tên cột chữ thường (`lowercase`), tự động nhận diện các cột ngày tháng để ép kiểu `DATETIME`.
-4. Nạp dữ liệu theo khối (`chunksize=1000`) tối ưu hóa RAM và I/O.
-
----
-
-## 4. Giai đoạn 2: Kích hoạt Change Data Capture (CDC)
-
-Dự án áp dụng công nghệ **Change Data Capture (CDC)** trên bảng giao dịch tần suất cao `sales`:
-
-### 4.1. Kích hoạt CDC (`src/enable_cdc.py`)
-1. **Bật CDC cấp Database:** Thực thi `sys.sp_cdc_enable_db`.
-2. **Tạo Primary Key:** Thiết lập khóa chính tổng hợp `PK_sales` trên 2 cột `(order_number, order_line_item)`.
-3. **Bật CDC cấp Table:** Thực thi `sys.sp_cdc_enable_table` trên bảng `dbo.sales`.
-4. **Bảng Change Table tương ứng:** SQL Server tự động tạo bảng ghi log thay đổi: **`cdc.dbo_sales_CT`**.
-
-### 4.2. Ý nghĩa các mã thao tác CDC (`__$operation`):
-* **`1` = DELETE**: Bản ghi bị xóa khỏi hệ thống nguồn.
-* **`2` = INSERT**: Đơn hàng mới được thêm vào.
-* **`3` = UPDATE (Before)**: Giá trị cũ của đơn hàng *ngay trước* khi bị sửa.
-* **`4` = UPDATE (After)**: Giá trị mới của đơn hàng *ngay sau* khi sửa xong.
-
-> [!NOTE]
-> Tính năng CDC phụ thuộc vào dịch vụ **SQL Server Agent**. Trong `docker-compose.yml`, biến môi trường `MSSQL_AGENT_ENABLED: "true"` luôn được bật để Agent tự động quét transaction log đưa vào bảng `cdc.dbo_sales_CT`.
+### 3.2. Automated Ingestion Highlights:
+1. `wait_for_sql_server`: Actively polls port `1433` until SQL Server is healthy and ready to accept queries.
+2. `ensure_database`: Automatically executes `CREATE DATABASE [AdventureWorks]` if it does not already exist.
+3. Standardizes column names to lowercase and strips leading/trailing whitespaces.
+4. Auto-detects and casts date strings to native `DATETIME` types so SQL Server creates proper date columns instead of generic `VARCHAR`.
+5. Ingests records in batches (`chunksize=1000`) for optimal memory and disk I/O performance.
 
 ---
 
-## 5. Giai đoạn 3: Nạp dữ liệu sang Snowflake với DLT (Data Load Tool)
+## 4. Phase 2: Change Data Capture (CDC) Configuration
 
-Sử dụng thư viện mã nguồn mở hiện đại **`dlt`** kết hợp cơ chế xác thực **RSA Key-Pair Authentication** an toàn:
+The platform leverages **SQL Server Change Data Capture (CDC)** on the high-frequency transactional table `sales`:
 
-### 5.1. Ba Pipeline Ingestion chuyên biệt:
+### 4.1. Enabling CDC (`src/enable_cdc.py`)
+1. **Database-Level Enablement:** Executes `sys.sp_cdc_enable_db`.
+2. **Primary Key Enforcement:** Ensures a composite primary key `PK_sales` on `(order_number, order_line_item)`.
+3. **Table-Level Enablement:** Executes `sys.sp_cdc_enable_table` on `dbo.sales` with `@supports_net_changes = 1`.
+4. **Change Table Generation:** SQL Server automatically creates the tracking table **`cdc.dbo_sales_CT`**.
 
-#### 1. Pipeline Khởi tạo Baseline (`src/ingests/initial_snapshot.py`):
-- Nạp toàn bộ 8 bảng từ `dbo` sang schema `BRONZE` trên Snowflake với chế độ `write_disposition="replace"`.
-- Ghi nhận lại điểm chốt LSN lớn nhất hiện tại (`capture_checkpoint_lsn()`) làm mốc bắt đầu cho CDC.
+### 4.2. CDC Operation Identifiers (`__$operation`):
+* **`1` = DELETE**: Record was deleted in the OLTP database.
+* **`2` = INSERT**: A new sales order was created.
+* **`3` = UPDATE (Before)**: The old state of the record *immediately prior* to the update.
+* **`4` = UPDATE (After)**: The updated state of the record *immediately after* the update.
 
-#### 2. Pipeline Full Replace (`src/ingests/replace_pipeline.py`):
-- Chuyên phụ trách 7 bảng Dimension / Returns ít biến động (`calendar`, `customers`, `products`, `product_categories`, `product_subcategories`, `returns`, `territories`).
-- Chạy định kỳ với `write_disposition="replace"` để đồng bộ trạng thái mới nhất từ OLTP.
+> [!IMPORTANT]
+> SQL Server CDC relies on the **SQL Server Agent** background capture job. In `docker-compose.yml`, `MSSQL_AGENT_ENABLED: "true"` is configured to ensure the capture job continuously writes transaction log changes into `cdc.dbo_sales_CT`.
 
-#### 3. Pipeline Streaming CDC (`src/ingests/cdc_pipeline.py`):
-- Chỉ bắt bảng `cdc.dbo_sales_CT`.
-- Áp dụng cơ chế con trỏ gia tăng (**Incremental Cursor**) trên trường `__$start_lsn`:
+---
+
+## 5. Phase 3: Data Ingestion to Snowflake via DLT
+
+The ingestion layer uses **`dlt` (data load tool)** with **RSA Key-Pair Authentication** to extract and load data into Snowflake:
+
+### 5.1. Three Specialized Ingestion Pipelines:
+
+#### 1. Baseline Snapshot Pipeline (`src/ingests/initial_snapshot.py`):
+- Loads all 8 source tables from `dbo` to Snowflake schema `BRONZE` using `write_disposition="replace"`.
+- Records the highest current Log Sequence Number (`capture_checkpoint_lsn()`) as the initial CDC checkpoint.
+
+#### 2. Full Replace Pipeline (`src/ingests/replace_pipeline.py`):
+- Dedicated to the 7 dimension and returns tables (`calendar`, `customers`, `products`, `product_categories`, `product_subcategories`, `returns`, `territories`).
+- Runs on a periodic schedule with `write_disposition="replace"` to maintain synchronicity with source master data.
+
+#### 3. Incremental CDC Streaming Pipeline (`src/ingests/cdc_pipeline.py`):
+- Targets the change table `cdc.dbo_sales_CT`.
+- Employs an **Incremental Cursor** on `__$start_lsn`:
   ```python
   source.resources["dbo_sales_CT"].apply_hints(
       incremental=dlt.sources.incremental(
@@ -216,19 +217,19 @@ Sử dụng thư viện mã nguồn mở hiện đại **`dlt`** kết hợp cơ
       )
   )
   ```
-- Đẩy dữ liệu vào bảng **`ADVENTUREWORKS.BRONZE.DBO_SALES_CT`** ở chế độ **`write_disposition="append"`** để lưu toàn bộ vết lịch sử giao dịch.
+- Appends newly captured transaction events into **`ADVENTUREWORKS.BRONZE.DBO_SALES_CT`** using **`write_disposition="append"`** to preserve a complete audit trail.
 
 ---
 
-## 6. Giai đoạn 4: Data Modeling & Transformation với dbt Core
+## 6. Phase 4: Data Modeling & Transformation with dbt Core
 
-Dự án áp dụng kiến trúc **Medallion Architecture (Bronze &rarr; Staging &rarr; Gold)** và mô hình hình sao **Kimball Star Schema**:
+The transformation layer adopts the **Medallion Architecture (Bronze &rarr; Staging &rarr; Gold)** and **Kimball Star Schema**:
 
-### 6.1. Tầng Staging (`BRONZE_STAGING`):
-Gồm 12 models view (`src_*.sql`) chịu trách nhiệm làm sạch và chuẩn hóa kiểu dữ liệu.
+### 6.1. Staging Layer (`BRONZE_STAGING` Schema):
+Consists of 12 views (`src_*.sql`) providing preliminary cleaning, casting, and renaming.
 
-* **Xử lý Deduplicate CDC đặc thù trong [`src_cdc_sales.sql`](dbt_project/models/src/src_cdc_sales.sql):**
-  Lọc bỏ dòng `UPDATE_BEFORE` (mã `3`), chỉ lấy sự kiện sau cùng của mỗi đơn hàng bằng hàm cửa sổ:
+* **CDC Deduplication Algorithm in [`src_cdc_sales.sql`](dbt_project/models/src/src_cdc_sales.sql):**
+  Discards obsolete `UPDATE_BEFORE` records (`_operation = 3`) and isolates the latest event per order line using window functions:
   ```sql
   ROW_NUMBER() OVER (
       PARTITION BY order_number, order_line_item 
@@ -236,10 +237,10 @@ Gồm 12 models view (`src_*.sql`) chịu trách nhiệm làm sạch và chuẩn
   ) AS rn
   ```
 
-### 6.2. Tầng SCD Type 2 Snapshot ([`snapshots/snap_products.sql`](dbt_project/snapshots/snap_products.sql)):
-Áp dụng chiến lược `check` trên các cột giá (`product_price`, `product_cost`) để lưu vết lịch sử biến động giá của sản phẩm theo thời gian (`dbt_valid_from`, `dbt_valid_to`).
+### 6.2. SCD Type 2 Snapshot ([`snapshots/snap_products.sql`](dbt_project/snapshots/snap_products.sql)):
+Applies dbt snapshot `check` strategy on pricing columns (`product_price`, `product_cost`) to capture price change history over time (`dbt_valid_from`, `dbt_valid_to`).
 
-### 6.3. Tầng Core Data Warehouse (`GOLD` - Star Schema):
+### 6.3. Gold Layer: Kimball Star Schema
 
 ```mermaid
 erDiagram
@@ -311,94 +312,94 @@ erDiagram
     }
 ```
 
-#### Chi tiết các bảng tầng Gold:
-1. **`dim_calendar`**: Sinh bộ lịch thời gian hoàn chỉnh từ 2020 &rarr; 2022. Tự sinh **Smart Date Key** (`YYYYMMDD` dạng INT) giúp Fact bảng không cần tốn chi phí JOIN khi tra cứu thời gian.
-2. **`dim_customers`**: Chuẩn hóa thông tin nhân khẩu học của 18,148 khách hàng, ép kiểu `birth_date` sang `DATE`.
-3. **`dim_products`**: Làm phẳng 3 bảng (Products + Subcategories + Categories), chuẩn hóa size hỗn hợp số/chữ (`product_size_type`: `Clothing` vs `Frame (cm)`) và phong cách (`product_style`: `Unisex`, `Women`, `Men`).
-4. **`dim_territories`**: Danh mục 10 khu vực kinh doanh toàn cầu, chuẩn hóa khóa thành `territory_key`.
-5. **`fct_sales`**: Bảng Fact bán hàng triển khai cơ chế **Incremental Merge**. Lần đầu tiên nạp 23,935 đơn lịch sử; các lần sau tự động MERGE các bản ghi CDC mới dựa trên cặp khóa chính `(order_number, order_line_item)`.
-6. **`fct_returns`**: Bảng Fact trả hàng ghi nhận 1,809 sự kiện hoàn trả, hỗ trợ đo lường Return Rate.
+#### Gold Dimension & Fact Details:
+1. **`dim_calendar`**: Rich time dimension table generated from 2020 through 2022. Produces integer **Smart Date Keys** (`YYYYMMDD`), allowing Fact tables to link to time attributes without expensive SQL joins.
+2. **`dim_customers`**: Demographic profiles for 18,148 customers with normalized `birth_date` cast to `DATE`.
+3. **`dim_products`**: Denormalized (flattened) catalog joining products, subcategories, and categories. Standardizes mixed alphanumeric sizes (`Clothing` vs. `Frame (cm)`) and style codes (`Unisex`, `Women`, `Men`).
+4. **`dim_territories`**: 10 global sales regions with unified `territory_key`.
+5. **`fct_sales`**: Transactional sales fact table utilizing **Incremental Merge Strategy**. Initial run ingests 23,935 baseline orders; subsequent runs execute a `MERGE INTO` statement on `(order_number, order_line_item)` using CDC events, preventing revenue duplication.
+6. **`fct_returns`**: Product returns fact table tracking 1,809 return records to measure Return Rates.
 
 ---
 
-## 7. Giai đoạn 5: Kiểm thử chất lượng dữ liệu (Data Quality Testing)
+## 7. Phase 5: Data Quality Testing & Governance
 
-File [`models/schema.yml`](dbt_project/models/schema.yml) định nghĩa **30 bài kiểm thử tự động**:
-- **Primary Key Uniqueness & Not-null:** Đảm bảo toàn bộ khóa chính trong các bảng Dim và Fact không bị trùng lặp hay mang giá trị NULL.
-- **Foreign Key Referencing (`relationships`):** Đảm bảo `fct_sales.customer_key` tồn tại 100% trong `dim_customers`.
-- **Accepted Values:** Kiểm tra giới tính khách hàng (`gender IN ['M', 'F']`), mã thao tác CDC (`_operation IN [1, 2, 3, 4]`).
+Configured in [`models/schema.yml`](dbt_project/models/schema.yml) with **30 automated data tests**:
+- **Uniqueness & Not-Null:** Enforced across all primary keys in both Dimension and Fact models.
+- **Referential Integrity (`relationships`):** Verifies that `fct_sales.customer_key` exists in `dim_customers`.
+- **Accepted Values:** Validates categorical domain values, such as customer gender (`gender IN ['M', 'F']`) and CDC operation codes (`_operation IN [1, 2, 3, 4]`).
 
 ---
 
-## 8. Hướng dẫn vận hành hệ thống (Runbook từ A đến Z)
+## 8. Operational Runbook (Step-by-Step CLI Execution)
 
-### Bước 1: Khởi động môi trường SQL Server trên Docker
+### Step 1: Start SQL Server on Docker
 ```bash
-# Cấp quyền thực thi và chạy script tự động dựng container
+# Grant execution permissions and run automated startup script
 chmod +x scripts/run_sqlserver.sh
 ./scripts/run_sqlserver.sh
 ```
 
-### Bước 2: Kích hoạt Change Data Capture (CDC)
+### Step 2: Enable Change Data Capture (CDC)
 ```bash
 .venv/bin/python src/enable_cdc.py
 ```
 
-### Bước 3: Nạp dữ liệu sang Snowflake với DLT
+### Step 3: Execute Ingestion to Snowflake via DLT
 ```bash
-# 1. Nạp snapshot ban đầu (Chạy lần đầu tiên)
+# 1. Ingest initial baseline snapshot (run once)
 .venv/bin/python src/ingests/initial_snapshot.py
 
-# 2. Nạp thay thế các bảng Dimensions
+# 2. Ingest master dimension tables (full replace)
 .venv/bin/python src/ingests/replace_pipeline.py
 
-# 3. Chạy sync CDC log định kỳ (hoặc sau mỗi lần có giao dịch mới)
+# 3. Stream CDC transaction logs (run periodically or upon new events)
 .venv/bin/python src/ingests/cdc_pipeline.py
 ```
 
-### Bước 4: Chạy Transform và Kiểm thử với dbt
+### Step 4: Run Transformations & Tests with dbt
 ```bash
 cd dbt_project
 
-# Chạy snapshot SCD Type 2 cho sản phẩm
+# 1. Execute SCD Type 2 snapshot for products
 dbt snapshot
 
-# Khởi tạo toàn bộ mô hình (chạy full refresh lần đầu cho Fact Sales)
+# 2. Build the entire model pipeline (use --full-refresh on the first fct_sales run)
 dbt run --select fct_sales --full-refresh
 dbt run
 
-# Chạy kiểm thử chất lượng dữ liệu (30 tests)
+# 3. Execute all 30 automated data quality tests
 dbt test
 
-# Xem thử dữ liệu trực tiếp trên terminal mà không cần mở Snowflake Web UI
+# 4. Preview model outputs directly in terminal without opening Snowflake UI
 dbt show --select dim_customers --limit 5
 dbt show --select fct_sales --limit 5
 
-# Sinh tài liệu và sơ đồ Data Lineage trực quan trên trình duyệt
+# 5. Generate and serve interactive documentation & lineage graph
 dbt docs generate
 dbt docs serve
 ```
 
 ---
 
-## 9. Kịch bản kiểm chứng tính năng CDC (Verification Scenario)
+## 9. CDC Verification Walkthrough
 
-Để kiểm chứng toàn bộ luồng CDC hoạt động chính xác từ OLTP sang Snowflake:
+To verify end-to-end CDC replication and incremental merging:
 
-1. **Insert 1 đơn hàng mới vào SQL Server:**
+1. **Insert a new sales order into SQL Server:**
    ```sql
    INSERT INTO dbo.sales (order_date, stock_date, order_number, product_key, customer_key, territory_key, order_line_item, order_quantity)
    VALUES (GETDATE(), GETDATE(), 'ORD-CDC-DEMO-999', 310, 11000, 1, 1, 10);
    ```
 
-2. **Chạy pipeline CDC của DLT:**
+2. **Run the DLT CDC pipeline:**
    ```bash
    .venv/bin/python src/ingests/cdc_pipeline.py
    ```
-   *DLT sẽ bắt bản ghi với `_OPERATION = 2` và tải 1 load package vào `ADVENTUREWORKS.BRONZE.DBO_SALES_CT`.*
+   *DLT extracts the change event (`_OPERATION = 2`) and loads 1 package into `ADVENTUREWORKS.BRONZE.DBO_SALES_CT`.*
 
-3. **Chạy dbt incremental merge:**
+3. **Execute dbt incremental merge:**
    ```bash
    cd dbt_project && dbt run --select fct_sales
    ```
-   *dbt tự động thực hiện lệnh MERGE INTO: cập nhật bảng `GOLD.FCT_SALES` với chính xác 1 dòng mới mà không cần nạp lại 23,935 dòng cũ!*
+   *dbt executes an atomic `MERGE INTO`: merging exactly 1 new record into `GOLD.FCT_SALES` without reloading the 23,935 historical records!*
