@@ -37,7 +37,10 @@ select
         ELSE p.product_style
     END AS product_style,
     p.product_cost,
-    p.product_price
+    p.product_price,
+    p.dbt_updated_at,
+    p.dbt_valid_from,
+    p.dbt_valid_to
 from snap_product p
 left join SRC_PRODUCT_SUBCATEGORIES ps
 on p.product_subcategory_key = ps.product_subcategory_key
