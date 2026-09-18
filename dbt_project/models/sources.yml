@@ -23,7 +23,7 @@ sources:
         description: "The Territories table contains information about the sales territories of Adventure Works, including their names and descriptions. It is used to support sales analysis and forecasting."
       - name: dbo_products_ct
         description: "Raw CDC change table for products streaming from SQL Server."
-      - name: dbo_sales_ct
+      - name: DBO_SALES_CT
         description: "Raw CDC change table for sales transactions streaming from SQL Server."
       - name: _DLT_LOADS
         description: "The _DLT_LOADS table is a system table used by Delta Live Tables to track the progress of data loads. It contains information about the status of each load, including the start and end times, the number of records processed, and any errors encountered during the load process."

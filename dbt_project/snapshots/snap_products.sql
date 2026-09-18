@@ -7,7 +7,19 @@
       check_cols=['product_price', 'product_cost']
     )
 }}
+
+
 select 
-  * 
+    product_key,
+    product_subcategory_key,
+    product_sku,
+    product_name,
+    model_name,
+    product_description,
+    product_color,
+    product_size,
+    product_style,
+    product_cost,
+    product_price
 from {{ ref('src_products') }}
 {% endsnapshot %}

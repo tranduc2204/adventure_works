@@ -2,19 +2,21 @@
 
 with raw_sales_cdc as (
     select 
-        ORDER_NUMBER,
-        ORDER_LINE_ITEM,
-        ORDER_DATE,
-        STOCK_DATE,
-       
-        PRODUCT_KEY,
-        CUSTOMER_KEY,
-        TERRITORY_KEY,
-        
-        ORDER_QUANTITY,
-        _operation,
-        _start_lsn,
-        _seqval,
+        cast (ORDER_NUMBER as varchar(50)) as ORDER_NUMBER,
+        cast (ORDER_LINE_ITEM as int) as ORDER_LINE_ITEM,
+
+        -- cast (ORDER_DATE as date) as ORDER_DATE,
+        -- cast (STOCK_DATE as date) as STOCK_DATE,
+        TO_VARCHAR(order_date, 'YYYYMMDD')::INT AS order_date_key,
+        TO_VARCHAR(stock_date, 'YYYYMMDD')::INT AS stock_date_key,
+
+        cast (PRODUCT_KEY as int) as PRODUCT_KEY,
+        cast (CUSTOMER_KEY as int) as CUSTOMER_KEY,
+        cast (TERRITORY_KEY as int) as TERRITORY_KEY,
+        cast (ORDER_QUANTITY as int) as ORDER_QUANTITY,
+        cast (_operation as int) as _operation,
+        cast (_start_lsn as varchar(50)) as _start_lsn,
+        cast (_seqval as varchar(50)) as _seqval,
         ROW_NUMBER() OVER (
             PARTITION BY order_number, order_line_item 
             ORDER BY _start_lsn DESC, _seqval DESC
@@ -24,8 +26,8 @@ with raw_sales_cdc as (
 select 
     order_number,
     order_line_item,
-    order_date,
-    stock_date,
+    order_date_key,
+    stock_date_key,
     product_key,
     customer_key,
     territory_key,

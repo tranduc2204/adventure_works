@@ -1,0 +1,166 @@
+# version: 2
+
+# models:
+#   # ==========================================
+#   # DIMENSION MODELS (GOLD LAYER)
+#   # ==========================================
+#   - name: dim_customers
+#     description: "Dimension table containing cleaned and transformed customer profile data."
+#     columns:
+#       - name: customer_key
+#         description: "Primary key for each customer."
+#         data_tests:
+#           - unique
+#           - not_null
+
+#       - name: email_address
+#         description: "Customer email address."
+#         data_tests:
+#           - not_null
+
+#       - name: birth_date
+#         description: "Customer date of birth (cast to DATE)."
+
+#       - name: gender
+#         description: "Customer gender (M, F)."
+#         data_tests:
+#           - accepted_values:
+#               arguments:
+#                 values: ['M', 'F']
+#               config:
+#                 severity: warn
+
+#       - name: annual_income
+#         description: "Customer annual income in USD."
+
+#   # ==========================================
+#   # FACT MODELS (GOLD LAYER)
+#   # ==========================================
+#   - name: fct_sales
+#     description: "Core sales transaction fact table built incrementally by merging baseline sales and CDC events."
+#     columns:
+#       - name: order_number
+#         description: "Order number identifying the transaction."
+#         data_tests:
+#           - not_null
+
+#       - name: order_line_item
+#         description: "Line item sequence number within the order."
+#         data_tests:
+#           - not_null
+
+#       - name: order_date
+#         description: "Date the order was placed."
+#         data_tests:
+#           - not_null
+
+#       - name: customer_key
+#         description: "Foreign key referencing dim_customers."
+#         data_tests:
+#           - not_null
+#           - relationships:
+#               arguments:
+#                 to: ref('dim_customers')
+#                 field: customer_key
+
+#       - name: product_key
+#         description: "Foreign key referencing products."
+#         data_tests:
+#           - not_null
+
+#       - name: territory_key
+#         description: "Foreign key referencing sales territory."
+#         data_tests:
+#           - not_null
+
+#       - name: order_quantity
+#         description: "Number of units ordered."
+#         data_tests:
+#           - not_null
+
+#       - name: is_deleted
+#         description: "Soft-delete flag indicating whether the order line was cancelled or deleted via CDC."
+
+#   # ==========================================
+#   # STAGING / SOURCE MODELS (BRONZE_STAGING)
+#   # ==========================================
+#   - name: src_sales
+#     description: "Staging model for baseline sales transactions loaded from Bronze."
+#     columns:
+#       - name: order_number
+#         data_tests:
+#           - not_null
+#       - name: order_line_item
+#         data_tests:
+#           - not_null
+
+#   - name: src_cdc_sales
+#     description: "Staging model deduplicating CDC log events from dbo_sales_ct to retrieve the latest transaction state."
+#     columns:
+#       - name: order_number
+#         data_tests:
+#           - not_null
+#       - name: order_line_item
+#         data_tests:
+#           - not_null
+#       - name: _operation
+#         description: "CDC operation code: 1 (DELETE), 2 (INSERT), 3 (UPDATE_BEFORE), 4 (UPDATE_AFTER)."
+#         data_tests:
+#           - not_null
+#           - accepted_values:
+#               arguments:
+#                 values: [1, 2, 3, 4]
+#       - name: is_deleted
+#         description: "True if operation is DELETE (1), otherwise False."
+
+#   - name: src_customers
+#     description: "Staging model for raw customer data."
+#     columns:
+#       - name: customer_key
+#         data_tests:
+#           - unique
+#           - not_null
+
+#   - name: src_products
+#     description: "Staging model for product catalog."
+#     columns:
+#       - name: product_key
+#         data_tests:
+#           - unique
+#           - not_null
+
+#   - name: src_calendar
+#     description: "Staging model for date dimension."
+#     columns:
+#       - name: date
+#         data_tests:
+#           - unique
+#           - not_null
+
+#   - name: src_territories
+#     description: "Staging model for sales territories."
+#     columns:
+#       - name: sales_territory_key
+#         data_tests:
+#           - unique
+#           - not_null
+
+#   - name: src_returns
+#     description: "Staging model for returned items."
+
+#   - name: src_product_categories
+#     description: "Staging model for high-level product categories."
+#     columns:
+#       - name: product_category_key
+#         data_tests:
+#           - unique
+#           - not_null
+
+#   - name: src_product_subcategories
+#     description: "Staging model for product subcategories."
+#     columns:
+#       - name: product_subcategory_key
+#         data_tests:
+#           - unique
+#           - not_null
+
