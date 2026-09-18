@@ -1,4 +1,3 @@
-
 with raw_products as (
     select 
         *
@@ -7,5 +6,4 @@ with raw_products as (
 select 
     *
 from raw_products
-
 

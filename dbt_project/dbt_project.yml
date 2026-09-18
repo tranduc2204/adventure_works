@@ -35,9 +35,10 @@ models:
     +materialized: view
     dim:
       +materialized: table
-      +schema: SILVER
+      +schema: GOLD
     fct:
       +materialized: table 
-      +schema: SILVER
+      +schema: GOLD
     src:
       +materialized: view
+      +schema: BRONZE_STAGING
