@@ -28,3 +28,5 @@ select
     product_price
 from raw_products
 
+
+

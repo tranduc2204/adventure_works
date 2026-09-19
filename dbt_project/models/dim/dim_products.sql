@@ -39,7 +39,12 @@ select
     p.product_cost,
     p.product_price,
     p.dbt_updated_at,
-    p.dbt_valid_from,
+    -- p.dbt_valid_from,
+    CASE 
+        WHEN ROW_NUMBER() OVER (PARTITION BY p.product_key ORDER BY p.dbt_valid_from ASC) = 1 
+        THEN '1900-01-01'::TIMESTAMP 
+        ELSE p.dbt_valid_from 
+    END AS dbt_valid_from,
     p.dbt_valid_to
 from snap_product p
 left join SRC_PRODUCT_SUBCATEGORIES ps
