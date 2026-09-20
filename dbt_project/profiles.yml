@@ -5,7 +5,7 @@ dbt_project:
       account: xaubpkk-dh32892
       user: DBT
       role: TRANSFORM
-      private_key_path: /home/dustin/Desktop/DataEngineer/adventure_works/rsa_key.p8
+      private_key_path: "{{ env_var('DBT_PRIVATE_KEY_PATH', '/home/dustin/Desktop/DataEngineer/adventure_works/rsa_key.p8') }}"
       database: ADVENTUREWORKS
       schema: BRONZE
       threads: 1

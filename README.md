@@ -103,6 +103,12 @@ adventure_works/
 ├── dbt_project/                     # dbt Core project (Transformation & Modeling)
 │   ├── dbt_project.yml              # Project configuration & schema definitions
 │   ├── profiles.yml                 # Snowflake connection config (RSA Key-Pair Auth)
+│   ├── analyses/                    # Ad-hoc business analysis queries
+│   │   ├── q01.sql                  # Q1: Total gross revenue (CFO)
+│   │   ├── q02.sql                  # Q2: Category revenue ranking with SCD2 handling
+│   │   ├── q04.sql                  # Q4: Total returned quantity & date range
+│   │   ├── q05.sql                  # Q5: Catalog breakdown by product color & % share
+│   │   └── q06.sql                  # Q6: Gross margin & profitability by subcategory
 │   ├── macros/
 │   │   └── generate_schema_name.sql # Custom schema name resolution macro
 │   ├── models/
@@ -313,7 +319,7 @@ erDiagram
 ```
 
 #### Gold Dimension & Fact Details:
-1. **`dim_calendar`**: Rich time dimension table generated from 2020 through 2022. Produces integer **Smart Date Keys** (`YYYYMMDD`), allowing Fact tables to link to time attributes without expensive SQL joins.
+1. **`dim_calendar`**: Rich time dimension table generated dynamically from `2000-01-01` through `CURRENT_DATE()` using Snowflake's `TABLE(GENERATOR())` in `src_calendar`. Produces integer **Smart Date Keys** (`YYYYMMDD`), allowing Fact tables to link to time attributes without expensive SQL joins.
 2. **`dim_customers`**: Demographic profiles for 18,148 customers with normalized `birth_date` cast to `DATE`.
 3. **`dim_products`**: Denormalized (flattened) catalog joining products, subcategories, and categories. Standardizes mixed alphanumeric sizes (`Clothing` vs. `Frame (cm)`) and style codes (`Unisex`, `Women`, `Men`).
 4. **`dim_territories`**: 10 global sales regions with unified `territory_key`.
@@ -380,6 +386,23 @@ dbt docs generate
 dbt docs serve
 ```
 
+### Step 5: Automated Pipeline Orchestration with Apache Airflow
+Instead of manually running CLI commands, you can run the entire platform automatically using the built-in vanilla Apache Airflow setup in `docker-compose.yml`:
+
+```bash
+# 1. Build images and start all services in the background
+docker compose up -d --build
+
+# 2. Access the Airflow Web UI
+# URL: http://localhost:8080
+# Credentials: admin / admin
+
+# 3. Trigger or monitor production DAGs:
+# - dag_adventureworks_cdc_sales: Near real-time sync (every 30m) for CDC logs -> fct_sales merge -> tests
+# - dag_adventureworks_daily_dimensions: Daily batch sync (01:00 AM) for Master Dimensions -> SCD2 Snapshot -> tests
+```
+
+
 ---
 
 ## 9. CDC Verification Walkthrough
@@ -403,3 +426,38 @@ To verify end-to-end CDC replication and incremental merging:
    cd dbt_project && dbt run --select fct_sales
    ```
    *dbt executes an atomic `MERGE INTO`: merging exactly 1 new record into `GOLD.FCT_SALES` without reloading the 23,935 historical records!*
+
+---
+
+## 10. Phase 6: Ad-Hoc Business Analytics (`dbt_project/analyses/`)
+
+The platform contains production-ready analytical queries in `dbt_project/analyses/`, addressing key executive business questions across Finance, Merchandising, and Quality Assurance:
+
+| Analysis File | Business Persona | Core Question & Objective | Key Technical / Modeling Approach |
+| :--- | :--- | :--- | :--- |
+| [`q01.sql`](dbt_project/analyses/q01.sql) | **CFO** | Total gross sales revenue across the entire platform. | Aggregates `fct_sales` joined with `dim_products` to compute total orders, total units sold, and gross revenue (`order_quantity * product_price`). |
+| [`q02.sql`](dbt_project/analyses/q02.sql) | **Head of Merchandising** | Top-performing product categories by revenue (descending). | Resolves **SCD Type 2 Point-in-Time Join** via `dim_calendar` (`full_date >= dbt_valid_from AND (full_date < dbt_valid_to OR dbt_valid_to IS NULL)`), eliminating duplicate rows caused by pricing history. |
+| [`q04.sql`](dbt_project/analyses/q04.sql) | **Head of Quality** | Total returned goods quantity and operational date boundary. | Joins `fct_returns` with `dim_calendar` to calculate total return records, earliest/latest return dates, and aggregate return volume. |
+| [`q05.sql`](dbt_project/analyses/q05.sql) | **Head of Merchandising** | Product color distribution and catalogue market share (% of total). | Aggregates distinct products, average price points, and computes % of catalog share via cross-join CTE with `dim_products`. |
+| [`q06.sql`](dbt_project/analyses/q06.sql) | **CFO** | Most profitable product subcategories by Gross Margin. | Computes gross profit margin: `SUM(order_quantity * product_price - order_quantity * product_cost)` grouped by `subcategory_name` and sorted descending. |
+
+### How to Run & Preview Analyses
+
+In dbt, files in `analyses/` are treated as ad-hoc analytical queries rather than materialized database models (`dbt run` does not materialize them into tables/views):
+
+1. **Preview results directly in terminal:**
+   ```bash
+   cd dbt_project
+   dbt show --select q01
+   dbt show --select q02
+   dbt show --select q04
+   dbt show --select q05
+   dbt show --select q06
+   ```
+
+2. **Compile to native SQL for Snowflake worksheets or BI reporting:**
+   ```bash
+   dbt compile --select q02
+   # Compiled SQL is generated at: target/compiled/dbt_project/analyses/q02.sql
+   ```
+

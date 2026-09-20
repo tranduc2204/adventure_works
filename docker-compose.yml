@@ -1,5 +1,49 @@
 
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.airflow
+  image: adventure_works_airflow:latest
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: "UTC"
+    # Project & Connection environment variables
+    DB_HOST: sqlserver
+    DB_PORT: 1433
+    DB_USER: sa
+    SA_PASSWORD: "${SA_PASSWORD:-MySecretPassword123}"
+    DB_NAME: "${DB_NAME:-AdventureWorks}"
+    DBT_PROFILES_DIR: /opt/airflow/dbt_project
+    DBT_PROJECT_DIR: /opt/airflow/dbt_project
+    DBT_PRIVATE_KEY_PATH: /opt/airflow/rsa_key.p8
+    PYTHONPATH: /opt/airflow:/opt/airflow/src
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/config:/opt/airflow/config
+    - ./dbt_project:/opt/airflow/dbt_project
+    - ./src:/opt/airflow/src
+    - ./.dlt:/opt/airflow/.dlt
+    - ./rsa_key.p8:/opt/airflow/rsa_key.p8:ro
+    - ./.env:/opt/airflow/.env:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
 services:
+  # ============================================================================
+  # 1. OLTP Source Database (SQL Server 2022)
+  # ============================================================================
   sqlserver:
     build:
       context: .
@@ -11,7 +55,7 @@ services:
       - .env
     environment:
       ACCEPT_EULA: "${ACCEPT_EULA:-Y}"
-      SA_PASSWORD: "${SA_PASSWORD}"
+      SA_PASSWORD: "${SA_PASSWORD:-MySecretPassword123}"
       MSSQL_PID: "${MSSQL_PID:-Developer}"
       MSSQL_AGENT_ENABLED: "${MSSQL_AGENT_ENABLED:-true}"
       DB_NAME: "${DB_NAME:-AdventureWorks}"
@@ -20,3 +64,107 @@ services:
       - ./src/ingest.py:/usr/src/app/ingest.py
       - ./.env:/usr/src/app/.env
     restart: unless-stopped
+
+  # ============================================================================
+  # 2. Apache Airflow Metadata Database (PostgreSQL)
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: airflow_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ============================================================================
+  # 3. Airflow DB Migration & Admin User Initialization
+  # ============================================================================
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow_init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins /opt/airflow/config
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins,config}
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin || true
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
+    user: "0:0"
+    restart: "no"
+
+  # ============================================================================
+  # 4. Airflow Webserver (UI on port 8080)
+  # ============================================================================
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow_webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ============================================================================
+  # 5. Airflow Scheduler (DAG Execution Engine)
+  # ============================================================================
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ============================================================================
+  # 6. Airflow Triggerer (Handles Deferrable Operators)
+  # ============================================================================
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: airflow_triggerer
+    command: triggerer
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-db-volume:

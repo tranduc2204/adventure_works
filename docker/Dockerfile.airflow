@@ -1,0 +1,25 @@
+FROM apache/airflow:2.10.2-python3.11
+
+USER root
+
+# Install system dependencies (build-essential, git, libpq)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Install dbt, dlt, pymssql and project dependencies into Airflow environment
+RUN pip install --no-cache-dir \
+    "dbt-core==1.11.0" \
+    "dbt-snowflake==1.11.0" \
+    "dlt[snowflake]==1.30.0" \
+    "pymssql>=2.3.0" \
+    "python-dotenv>=1.0.0" \
+    "pandas>=2.0.0" \
+    "sqlalchemy>=2.0.0" \
+    "cryptography>=42.0.0"
+
