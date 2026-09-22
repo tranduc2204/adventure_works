@@ -73,7 +73,123 @@ flowchart TB
 
 ---
 
-## 2. Project Directory Structure
+## 2. Dimensional Data Model (Kimball Star Schema)
+
+> **Gold Layer Architecture:** Designed strictly according to Ralph Kimball's Dimensional Modeling principles. High-volume transactional Fact tables (`fct_sales`, `fct_returns`) sit at the center of the star, surrounded by Conformed Dimensions (`dim_calendar`, `dim_customers`, `dim_products`, `dim_territories`). Features **Kimball Pure SCD Type 2 Surrogate Keys (`product_scd_key`)** and **Smart Integer Date Keys (`date_key`)** for high-performance $O(1)$ equi-joins on Snowflake.
+
+### 2.1. Star Schema Topology
+
+```mermaid
+flowchart TD
+    subgraph Dimensions ["🌟 Conformed Dimension Tables (Gold Layer)"]
+        DC["📅 <b>DIM_CALENDAR</b><br/>PK: date_key (YYYYMMDD)<br/>Hierarchies: Year, Quarter, Month, Day, Weekday"]
+        DP["🚲 <b>DIM_PRODUCTS (SCD Type 2)</b><br/>PK: product_scd_key (dbt_scd_id)<br/>NK: product_key | Price, Cost, Category, Size"]
+        DU["👤 <b>DIM_CUSTOMERS</b><br/>PK: customer_key<br/>Demographics: Name, Gender, Birth Date, Income"]
+        DT["🌍 <b>DIM_TERRITORIES</b><br/>PK: territory_key<br/>Geography: Region, Country, Continent"]
+    end
+
+    subgraph Facts ["⚡ Core Fact Tables (Gold Layer)"]
+        FS["🛒 <b>FCT_SALES</b> (Incremental Merge)<br/>PK: order_number, order_line_item<br/>Measures: order_quantity<br/>SCD2 SK: product_scd_key"]
+        FR["📦 <b>FCT_RETURNS</b><br/>Measures: return_quantity<br/>SCD2 SK: product_scd_key"]
+    end
+
+    DC -->|"order_date_key / stock_date_key (1:N)"| FS
+    DP -->|"product_scd_key (Pure SCD2 Equi-Join 1:N)"| FS
+    DU -->|"customer_key (1:N)"| FS
+    DT -->|"territory_key (1:N)"| FS
+
+    DC -->|"return_date_key (1:N)"| FR
+    DP -->|"product_scd_key (1:N)"| FR
+    DT -->|"territory_key (1:N)"| FR
+```
+
+### 2.2. Entity-Relationship (ER) Diagram & Table Attributes
+
+```mermaid
+erDiagram
+    DIM_CALENDAR ||--o{ FCT_SALES : "order_date_key = date_key"
+    DIM_CALENDAR ||--o{ FCT_SALES : "stock_date_key = date_key"
+    DIM_CUSTOMERS ||--o{ FCT_SALES : "customer_key"
+    DIM_PRODUCTS ||--o{ FCT_SALES : "product_scd_key (SCD2)"
+    DIM_TERRITORIES ||--o{ FCT_SALES : "territory_key"
+
+    DIM_CALENDAR ||--o{ FCT_RETURNS : "return_date_key = date_key"
+    DIM_PRODUCTS ||--o{ FCT_RETURNS : "product_scd_key (SCD2)"
+    DIM_TERRITORIES ||--o{ FCT_RETURNS : "territory_key"
+
+    DIM_CALENDAR {
+        int date_key PK "Smart Date Key (YYYYMMDD)"
+        date full_date "Standard Calendar Date"
+        int year "Calendar Year"
+        int quarter "Quarter (1 - 4)"
+        int month "Month (1 - 12)"
+        string month_name "Month Name (e.g. May)"
+        string day_name "Day Name (e.g. Monday)"
+        boolean is_weekend "Weekend Indicator"
+    }
+
+    DIM_CUSTOMERS {
+        int customer_key PK "Surrogate / Business Key"
+        string first_name "Customer First Name"
+        string last_name "Customer Last Name"
+        date birth_date "Date of Birth"
+        string gender "Gender (M / F)"
+        decimal annual_income "Annual Income"
+    }
+
+    DIM_PRODUCTS {
+        string product_scd_key PK "dbt_scd_id (SCD Type 2 Surrogate Key)"
+        int product_key "Business / Natural Key"
+        string product_sku "Product SKU"
+        string product_name "Product Name"
+        string category_name "Category (e.g. Bikes, Accessories)"
+        string subcategory_name "Subcategory (e.g. Mountain Bikes)"
+        string product_size "Normalized Size Value"
+        string product_size_type "Size Domain (Clothing / Frame / No Size)"
+        string product_style "Style (Unisex / Women / Men)"
+        decimal product_cost "Historical Unit Cost at Snapshot"
+        decimal product_price "Historical Unit Price at Snapshot"
+        int valid_from_date_key "SCD2 Valid From (YYYYMMDD / 19000101)"
+        int valid_to_date_key "SCD2 Valid To (YYYYMMDD / NULL)"
+    }
+
+    DIM_TERRITORIES {
+        int territory_key PK "Territory Unique Identifier"
+        string region "Sales Region"
+        string country "Country Name"
+        string continent "Continent Name"
+    }
+
+    FCT_SALES {
+        string order_number PK "Sales Order Number"
+        int order_line_item PK "Order Line Item Number"
+        int order_date_key FK "Order Date Key (links to DIM_CALENDAR)"
+        int stock_date_key FK "Stocking Date Key (links to DIM_CALENDAR)"
+        string product_scd_key FK "SCD2 Surrogate Key (links to DIM_PRODUCTS)"
+        int product_key "Business Key (SCD1 / Current State Analysis)"
+        int customer_key FK "Customer Key (links to DIM_CUSTOMERS)"
+        int territory_key FK "Territory Key (links to DIM_TERRITORIES)"
+        int order_quantity "Quantity Ordered"
+        boolean is_deleted "CDC Tombstone Flag (Soft Delete)"
+    }
+
+    FCT_RETURNS {
+        int return_date_key FK "Return Date Key (links to DIM_CALENDAR)"
+        int territory_key FK "Territory Key (links to DIM_TERRITORIES)"
+        string product_scd_key FK "SCD2 Surrogate Key (links to DIM_PRODUCTS)"
+        int product_key "Business Key"
+        int return_quantity "Quantity Returned"
+    }
+```
+
+### 2.3. Key Modeling Innovations
+1. **Kimball Pure SCD Type 2 via Surrogate Key:** Rather than storing only `product_key` and forcing downstream analytics to run expensive non-equi range joins (`BETWEEN valid_from AND valid_to`), `fct_sales` materializes the Point-in-Time version key (`product_scd_key = p.dbt_scd_id`). All BI queries execute lightning-fast $O(1)$ equi-joins with zero memory spilling.
+2. **Dual-Key Strategy:** Both `product_scd_key` (Historical As-Was) and `product_key` (Current As-Is) are retained in Fact tables, granting maximum analytical flexibility.
+3. **Smart Integer Date Keys:** Integer-encoded dates (`YYYYMMDD`) eliminate time-zone translation overhead and maximize Snowflake micro-partition pruning.
+
+---
+
+## 3. Project Directory Structure
 
 ```
 adventure_works/
@@ -151,11 +267,11 @@ adventure_works/
 
 ---
 
-## 3. Phase 1: OLTP System Simulation (SQL Server 2022 on Docker)
+## 4. Phase 1: OLTP System Simulation (SQL Server 2022 on Docker)
 
 The project simulates an enterprise transactional database (OLTP / ERP) using **SQL Server 2022** running inside Docker:
 
-### 3.1. Source Datasets & Table Mappings (`src/ingest.py`)
+### 4.1. Source Datasets & Table Mappings (`src/ingest.py`)
 
 | Source CSV (`data/`) | Target SQL Server Table | Record Count | Date Columns (`DATETIME`) | Business Description |
 | :--- | :--- | :---: | :--- | :--- |
@@ -168,7 +284,7 @@ The project simulates an enterprise transactional database (OLTP / ERP) using **
 | `sales.csv` | `dbo.sales` | 23,935 | `order_date`, `stock_date` | Historical order line-item transactions |
 | `territories.csv` | `dbo.territories` | 10 | - | Geographic sales regions & countries |
 
-### 3.2. Automated Ingestion Highlights:
+### 4.2. Automated Ingestion Highlights:
 1. `wait_for_sql_server`: Actively polls port `1433` until SQL Server is healthy and ready to accept queries.
 2. `ensure_database`: Automatically executes `CREATE DATABASE [AdventureWorks]` if it does not already exist.
 3. Standardizes column names to lowercase and strips leading/trailing whitespaces.
@@ -177,17 +293,17 @@ The project simulates an enterprise transactional database (OLTP / ERP) using **
 
 ---
 
-## 4. Phase 2: Change Data Capture (CDC) Configuration
+## 5. Phase 2: Change Data Capture (CDC) Configuration
 
 The platform leverages **SQL Server Change Data Capture (CDC)** on the high-frequency transactional table `sales`:
 
-### 4.1. Enabling CDC (`src/enable_cdc.py`)
+### 5.1. Enabling CDC (`src/enable_cdc.py`)
 1. **Database-Level Enablement:** Executes `sys.sp_cdc_enable_db`.
 2. **Primary Key Enforcement:** Ensures a composite primary key `PK_sales` on `(order_number, order_line_item)`.
 3. **Table-Level Enablement:** Executes `sys.sp_cdc_enable_table` on `dbo.sales` with `@supports_net_changes = 1`.
 4. **Change Table Generation:** SQL Server automatically creates the tracking table **`cdc.dbo_sales_CT`**.
 
-### 4.2. CDC Operation Identifiers (`__$operation`):
+### 5.2. CDC Operation Identifiers (`__$operation`):
 * **`1` = DELETE**: Record was deleted in the OLTP database.
 * **`2` = INSERT**: A new sales order was created.
 * **`3` = UPDATE (Before)**: The old state of the record *immediately prior* to the update.
@@ -198,11 +314,11 @@ The platform leverages **SQL Server Change Data Capture (CDC)** on the high-freq
 
 ---
 
-## 5. Phase 3: Data Ingestion to Snowflake via DLT
+## 6. Phase 3: Data Ingestion to Snowflake via DLT
 
 The ingestion layer uses **`dlt` (data load tool)** with **RSA Key-Pair Authentication** to extract and load data into Snowflake:
 
-### 5.1. Three Specialized Ingestion Pipelines:
+### 6.1. Three Specialized Ingestion Pipelines:
 
 #### 1. Baseline Snapshot Pipeline (`src/ingests/initial_snapshot.py`):
 - Loads all 8 source tables from `dbo` to Snowflake schema `BRONZE` using `write_disposition="replace"`.
@@ -227,11 +343,11 @@ The ingestion layer uses **`dlt` (data load tool)** with **RSA Key-Pair Authenti
 
 ---
 
-## 6. Phase 4: Data Modeling & Transformation with dbt Core
+## 7. Phase 4: Data Modeling & Transformation with dbt Core
 
 The transformation layer adopts the **Medallion Architecture (Bronze &rarr; Staging &rarr; Gold)** and **Kimball Star Schema**:
 
-### 6.1. Staging Layer (`BRONZE_STAGING` Schema):
+### 7.1. Staging Layer (`BRONZE_STAGING` Schema):
 Consists of 12 views (`src_*.sql`) providing preliminary cleaning, casting, and renaming.
 
 * **CDC Deduplication Algorithm in [`src_cdc_sales.sql`](dbt_project/models/src/src_cdc_sales.sql):**
@@ -243,21 +359,23 @@ Consists of 12 views (`src_*.sql`) providing preliminary cleaning, casting, and 
   ) AS rn
   ```
 
-### 6.2. SCD Type 2 Snapshot ([`snapshots/snap_products.sql`](dbt_project/snapshots/snap_products.sql)):
+### 7.2. SCD Type 2 Snapshot ([`snapshots/snap_products.sql`](dbt_project/snapshots/snap_products.sql)):
 Applies dbt snapshot `check` strategy on pricing columns (`product_price`, `product_cost`) to capture price change history over time (`dbt_valid_from`, `dbt_valid_to`).
 
-### 6.3. Gold Layer: Kimball Star Schema
+### 7.3. Gold Layer: Kimball Star Schema Details
+
+*(See [Section 2: Dimensional Data Model](#2-dimensional-data-model-kimball-star-schema) for full topology and column definitions).*
 
 ```mermaid
 erDiagram
     DIM_CALENDAR ||--o{ FCT_SALES : "order_date_key = date_key"
     DIM_CALENDAR ||--o{ FCT_SALES : "stock_date_key = date_key"
     DIM_CUSTOMERS ||--o{ FCT_SALES : "customer_key"
-    DIM_PRODUCTS ||--o{ FCT_SALES : "product_key"
+    DIM_PRODUCTS ||--o{ FCT_SALES : "product_scd_key (SCD2)"
     DIM_TERRITORIES ||--o{ FCT_SALES : "territory_key"
 
     DIM_CALENDAR ||--o{ FCT_RETURNS : "return_date_key = date_key"
-    DIM_PRODUCTS ||--o{ FCT_RETURNS : "product_key"
+    DIM_PRODUCTS ||--o{ FCT_RETURNS : "product_scd_key (SCD2)"
     DIM_TERRITORIES ||--o{ FCT_RETURNS : "territory_key"
 
     DIM_CALENDAR {
@@ -281,7 +399,8 @@ erDiagram
     }
 
     DIM_PRODUCTS {
-        int product_key PK
+        string product_scd_key PK
+        int product_key
         string product_name
         string category_name
         string subcategory_name
@@ -289,6 +408,9 @@ erDiagram
         string product_size_type
         string product_style
         decimal product_price
+        decimal product_cost
+        int valid_from_date_key
+        int valid_to_date_key
     }
 
     DIM_TERRITORIES {
@@ -303,8 +425,9 @@ erDiagram
         int order_line_item PK
         int order_date_key FK
         int stock_date_key FK
+        string product_scd_key FK
+        int product_key
         int customer_key FK
-        int product_key FK
         int territory_key FK
         int order_quantity
         boolean is_deleted
@@ -313,7 +436,8 @@ erDiagram
     FCT_RETURNS {
         int return_date_key FK
         int territory_key FK
-        int product_key FK
+        string product_scd_key FK
+        int product_key
         int return_quantity
     }
 ```
@@ -321,14 +445,14 @@ erDiagram
 #### Gold Dimension & Fact Details:
 1. **`dim_calendar`**: Rich time dimension table generated dynamically from `2000-01-01` through `CURRENT_DATE()` using Snowflake's `TABLE(GENERATOR())` in `src_calendar`. Produces integer **Smart Date Keys** (`YYYYMMDD`), allowing Fact tables to link to time attributes without expensive SQL joins.
 2. **`dim_customers`**: Demographic profiles for 18,148 customers with normalized `birth_date` cast to `DATE`.
-3. **`dim_products`**: Denormalized (flattened) catalog joining products, subcategories, and categories. Standardizes mixed alphanumeric sizes (`Clothing` vs. `Frame (cm)`) and style codes (`Unisex`, `Women`, `Men`).
+3. **`dim_products`**: Denormalized (flattened) catalog joining products, subcategories, and categories. Tracks pricing history via SCD Type 2 (`product_scd_key`). Standardizes mixed alphanumeric sizes (`Clothing` vs. `Frame (cm)`) and style codes (`Unisex`, `Women`, `Men`).
 4. **`dim_territories`**: 10 global sales regions with unified `territory_key`.
-5. **`fct_sales`**: Transactional sales fact table utilizing **Incremental Merge Strategy**. Initial run ingests 23,935 baseline orders; subsequent runs execute a `MERGE INTO` statement on `(order_number, order_line_item)` using CDC events, preventing revenue duplication.
+5. **`fct_sales`**: Transactional sales fact table utilizing **Incremental Merge Strategy**. Captures point-in-time pricing via `product_scd_key`. Initial run ingests 23,935 baseline orders; subsequent runs execute a `MERGE INTO` statement on `(order_number, order_line_item)` using CDC events, preventing revenue duplication.
 6. **`fct_returns`**: Product returns fact table tracking 1,809 return records to measure Return Rates.
 
 ---
 
-## 7. Phase 5: Data Quality Testing & Governance
+## 8. Phase 5: Data Quality Testing & Governance
 
 Configured in [`models/schema.yml`](dbt_project/models/schema.yml) with **30 automated data tests**:
 - **Uniqueness & Not-Null:** Enforced across all primary keys in both Dimension and Fact models.
@@ -337,7 +461,7 @@ Configured in [`models/schema.yml`](dbt_project/models/schema.yml) with **30 aut
 
 ---
 
-## 8. Operational Runbook (Step-by-Step CLI Execution)
+## 9. Operational Runbook (Step-by-Step CLI Execution)
 
 ### Step 1: Start SQL Server on Docker
 ```bash
@@ -405,7 +529,7 @@ docker compose up -d --build
 
 ---
 
-## 9. CDC Verification Walkthrough
+## 10. CDC Verification Walkthrough
 
 To verify end-to-end CDC replication and incremental merging:
 
@@ -429,7 +553,7 @@ To verify end-to-end CDC replication and incremental merging:
 
 ---
 
-## 10. Phase 6: Ad-Hoc Business Analytics (`dbt_project/analyses/`)
+## 11. Phase 6: Ad-Hoc Business Analytics (`dbt_project/analyses/`)
 
 The platform contains production-ready analytical queries in `dbt_project/analyses/`, addressing key executive business questions across Finance, Merchandising, and Quality Assurance:
 

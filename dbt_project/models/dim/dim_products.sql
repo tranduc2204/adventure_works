@@ -11,6 +11,9 @@ SRC_PRODUCT_CATEGORIES as (
 )
 
 select 
+    -- surrogate key cho SCD2
+    p.dbt_scd_id as product_scd_key,
+
     p.product_key,
     p.product_subcategory_key,
     ps.subcategory_name,
@@ -38,14 +41,16 @@ select
     END AS product_style,
     p.product_cost,
     p.product_price,
-    p.dbt_updated_at,
+    -- p.dbt_updated_at,
+    TO_VARCHAR(p.dbt_updated_at , 'YYYYMMDD') ::INT AS dbt_updated_at, 
     -- p.dbt_valid_from,
     CASE 
         WHEN ROW_NUMBER() OVER (PARTITION BY p.product_key ORDER BY p.dbt_valid_from ASC) = 1 
-        THEN '1900-01-01'::TIMESTAMP 
-        ELSE p.dbt_valid_from 
+        THEN 19000101
+        ELSE TO_VARCHAR(p.dbt_valid_from , 'YYYYMMDD') ::INT
     END AS dbt_valid_from,
-    p.dbt_valid_to
+    -- p.dbt_valid_to
+    TO_VARCHAR(p.dbt_valid_to , 'YYYYMMDD') ::INT AS dbt_valid_to
 from snap_product p
 left join SRC_PRODUCT_SUBCATEGORIES ps
 on p.product_subcategory_key = ps.product_subcategory_key
