@@ -27,11 +27,14 @@ select
     CASE 
         WHEN home_owner = 'Y' THEN TRUE 
         WHEN home_owner = 'N' THEN FALSE 
-        ELSE 'N/A' 
+        ELSE FALSE 
     END AS is_home_owner
 from {{ ref('src_customers') }}
 
+-- UNION ALL 
 
+-- -- select 
+-- --     -1 as customer_key
 
 
 

@@ -10,14 +10,16 @@ unit_tests:
           - {order_number: 'SO-101', order_line_item: 1, order_date_key: 20240515, product_key: 100, order_quantity: 1}
       - input: ref('dim_products')
         rows: 
-          - {product_scd_key: 'hash_v1', product_key: 100, valid_from_date_key: 20240101, valid_to_date_key: 20240501}
+          - {product_scd_key: 'hash_v1', product_key: 100, dbt_valid_from: 20240101, dbt_valid_to: 20240501}
           # Version mới có hiệu lực tại ngày mua
-          - {product_scd_key: 'hash_v2', product_key: 100, valid_from_date_key: 20240501, valid_to_date_key: 99991231}
+          - {product_scd_key: 'hash_v2', product_key: 100, dbt_valid_from: 20240501, dbt_valid_to: 99991231}
+      - input: ref('src_cdc_sales')
+        rows: []
     expect:
       rows:
         - {order_number: 'SO-101', order_line_item: 1, product_scd_key: 'hash_v2'}
 
-
+ 
 
 
 

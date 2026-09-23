@@ -1,0 +1,29 @@
+
+
+unit_tests:
+  - name: test_dim_products_demongraphic
+    model: dim_products
+    given:
+      - input: ref('snap_products')
+        rows:
+          - {product_key: 1, product_size: 'M', product_style: 'U'}
+          - {product_key: 2, product_size: '48', product_style: '0'}
+          - {product_key: 3, product_size: '0', product_style: null}
+      - input: ref('src_product_subcategories')
+        rows: []
+      - input: ref('src_product_categories')
+        rows: []
+    expect:
+      rows:
+        - {product_key: 1, product_size: 'M', product_size_type: 'Clothing', product_style: 'Unisex'}
+        - {product_key: 2, product_size: '48', product_size_type: 'Frame (cm)', product_style: 'N/A'}
+        - {product_key: 3, product_size: null, product_size_type: 'No Size', product_style: 'N/A'}
+
+
+
+
+
+
+
+
+
