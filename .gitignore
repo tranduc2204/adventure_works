@@ -20,3 +20,8 @@ rsa_key.pub
 .dlt
 __init__.py
 chess
+
+
+
+# che log 
+.log
