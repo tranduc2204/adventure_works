@@ -24,4 +24,5 @@ chess
 
 
 # che log 
-.log
+*.log
+dbt.log
