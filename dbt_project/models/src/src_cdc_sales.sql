@@ -5,8 +5,6 @@ with raw_sales_cdc as (
         cast (ORDER_NUMBER as varchar(50)) as ORDER_NUMBER,
         cast (ORDER_LINE_ITEM as int) as ORDER_LINE_ITEM,
 
-        -- cast (ORDER_DATE as date) as ORDER_DATE,
-        -- cast (STOCK_DATE as date) as STOCK_DATE,
         TO_VARCHAR(order_date, 'YYYYMMDD')::INT AS order_date_key,
         TO_VARCHAR(stock_date, 'YYYYMMDD')::INT AS stock_date_key,
 

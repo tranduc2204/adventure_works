@@ -12,10 +12,12 @@ select
         when marital_status = 'M' then 'Married'
         when marital_status = 'D' then 'Divorced'
         when marital_status = 'W' then 'Widowed'
+        else 'N/A' 
     end as marital_status,
     case 
         when gender = 'M' then 'Male'
         when gender = 'F' then 'Female'
+        else 'N/A'  
     end as gender,
     email_address,
     yearly_income,
@@ -24,7 +26,8 @@ select
     occupation,
     CASE 
         WHEN home_owner = 'Y' THEN TRUE 
-        ELSE FALSE 
+        WHEN home_owner = 'N' THEN FALSE 
+        ELSE 'N/A' 
     END AS is_home_owner
 from {{ ref('src_customers') }}
 

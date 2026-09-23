@@ -1,0 +1,23 @@
+
+
+
+# unit_tests:
+#   - name: test_cdc_sales_deduplication_and_delete_flag 
+#     description: "Testing by row_number pick all LSN max and flag _operation = 1 then is_deleted = TRUE"
+#     model: src_cdc
+#     given: 
+#       - input: source('BRONZE', 'DBO_SALES_CT')
+#         rows:
+#           - {ORDER_NUMBER: 'SO-101', ORDER_LINE_ITEM: 1, ORDER_DATE: '2021-01-01', _operation: 2, _start_lsn: '001', _seqval: '01'}
+#           - {ORDER_NUMBER: 'SO-101', ORDER_LINE_ITEM: 1, ORDER_DATE: '2021-01-01', _operation: 1, _start_lsn: '002', _seqval: '01'}
+#     expect:
+
+
+
+#     expect:
+#       rows:
+#         - {order_number: 'SO-101', order_line_item: 1, is_deleted: true, _start_lsn: '002'}
+
+
+
+

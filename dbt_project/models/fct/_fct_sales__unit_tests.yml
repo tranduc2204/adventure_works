@@ -1,6 +1,9 @@
 unit_tests:
   - name: test_fct_sales_scd2_lookup
     model: fct_sales
+    overrides:
+      macros:
+        is_incremental: false 
     given: 
       - input: ref('src_sales')
         rows:

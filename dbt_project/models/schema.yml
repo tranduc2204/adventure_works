@@ -174,7 +174,7 @@ models:
               field: customer_key
       - name: PRODUCT_SCD_KEY
         description: ""
-        data_test:
+        data_tests:
           - not_null
           - relationships:
               to: ref('dim_products')
@@ -207,22 +207,25 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_calendar')
-              field: date_key
+              arguments:
+                to: ref('dim_calendar')
+                field: date_key
       - name: territory_key
         description: "Foreign key referencing dim_territories."
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_territories')
-              field: territory_key
+              arguments:
+                to: ref('dim_territories')
+                field: territory_key
       - name: product_key
         description: "Foreign key referencing dim_products."
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_products')
-              field: product_key
+              arguments:
+                to: ref('dim_products')
+                field: product_key
       - name: return_quantity
         description: "Number of units returned."
         data_tests:
