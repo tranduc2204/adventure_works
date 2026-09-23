@@ -1,3 +1,7 @@
+{{ config(
+    materialized = 'table',
+    schema = 'QUARANTINE'  
+) }}
 with raw_products as (
     select 
         cast (product_key as bigint) as product_key,
@@ -25,12 +29,20 @@ select
     product_size,
     product_style,
     product_cost,
-    product_price
+    product_price,
+    CASE 
+        WHEN product_key IS NULL THEN 'Lỗi: Thiếu khóa chính product_key'
+        WHEN product_name IS NULL OR TRIM(product_name) = '' THEN 'Lỗi: Tên sản phẩm bị rỗng'
+        WHEN product_price <= 0 THEN 'Lỗi: Giá bán <= 0'
+        WHEN product_cost > product_price THEN 'Cảnh báo: Giá vốn lớn hơn giá bán (bán lỗ)'
+        ELSE 'Lỗi chất lượng dữ liệu khác'
+    END AS error_reason,
+    
+    CURRENT_TIMESTAMP() AS quarantined_at
 from raw_products
-WHERE product_key IS NOT NULL
-   OR product_name IS NOT NULL 
-   OR TRIM(product_name) <> ''
-   OR product_price > 0
-   OR product_cost < product_price
-
+WHERE product_key IS NULL
+   OR product_name IS NULL 
+   OR TRIM(product_name) = ''
+   OR product_price <= 0
+   OR product_cost > product_price
 

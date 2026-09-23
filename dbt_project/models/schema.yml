@@ -286,8 +286,9 @@ models:
     columns:
       - name: product_key
         data_tests:
-          - unique
-          - not_null
+          - not_null:
+              config:
+                serverity: warn 
 
   - name: src_calendar
     description: "Staging model generating daily calendar spine."

@@ -5,9 +5,11 @@
 
 {{
     config(
-        severity = "error"  -- Lỗi chồng chéo SCD2 là lỗi nghiêm trọng, nên để error
+        severity = "error" 
     )
 }}
+
+
 
 WITH ordered_versions AS (
     SELECT 
@@ -16,7 +18,7 @@ WITH ordered_versions AS (
         dbt_valid_to,
         -- Lấy ngày bắt đầu của phiên bản kế tiếp
         LEAD(dbt_valid_from) OVER (
-            PARTITION BY product_key 
+            PARTITION BY product_key
             ORDER BY dbt_valid_from ASC
         ) AS next_valid_from
     FROM {{ ref('dim_products') }}
