@@ -32,43 +32,61 @@ flowchart TB
     SQL_DB --> DLT_Rep
     CDC_Log --> DLT_CDC
 
-    subgraph S3 ["3. DATA WAREHOUSE (Snowflake Data Cloud)"]
+    subgraph S3 ["3. DATA WAREHOUSE & MODELING (Snowflake Data Cloud)"]
         direction TB
         
-        subgraph BronzeLayer ["BRONZE SCHEMA (Raw Tables & Append-only Logs)"]
+        subgraph BronzeLayer ["BRONZE SCHEMA (Raw Landing Tables & Append-only Event Logs)"]
             B_Dim["SALES, CUSTOMERS, PRODUCTS,\nCALENDAR, TERRITORIES, RETURNS,\nPRODUCT_CATEGORIES, PRODUCT_SUBCATEGORIES"]
             B_CDC["DBO_SALES_CT\n(Raw CDC event stream with LSN & Operation codes)"]
         end
 
         subgraph StagingLayer ["BRONZE_STAGING SCHEMA (dbt Staging & Snapshots)"]
-            S_Src["12 Staging Views (src_*.sql)\nData cleaning & type casting"]
-            S_CDC["src_cdc_sales.sql\nDeduplication via ROW_NUMBER() to get latest state"]
-            S_Snap["snap_products (SCD Type 2)\nTracks historical price & cost changes"]
+            S_Src["11 Staging Views (src_*.sql)\nType casting, column renaming & data cleaning"]
+            S_CDC["src_cdc_sales.sql\nDeduplication via ROW_NUMBER() by latest LSN"]
+            S_Snap["snap_products.sql (SCD Type 2)\nTracks historical price & cost changes"]
         end
 
-        subgraph GoldLayer ["GOLD SCHEMA (Core Dimensional Modeling - Star Schema)"]
-            D_Cust["dim_customers\n(Customer demographics, birth_date)"]
-            D_Prod["dim_products\n(Flattened categories, normalized size & style)"]
-            D_Cal["dim_calendar\n(Rich calendar hierarchy, Smart Date Key)"]
-            D_Terr["dim_territories\n(Sales geographic dimensions, territory_key)"]
+        subgraph QuarantineLayer ["QUARANTINE SCHEMA (Data Quality Dead Letter Queue)"]
+            Q_Prod["quarantine_products (Table)\nCaptures rejected/corrupt products:\n• NULL keys • Empty names • Price <= 0 • Selling at loss"]
+        end
+
+        subgraph GoldLayer ["GOLD SCHEMA (Kimball Star Schema)"]
+            D_Cust["dim_customers\n(Customer demographics, birth_date, marital_status)"]
+            D_Prod["dim_products\n(SCD Type 2 Pure Surrogate Key: product_scd_key)"]
+            D_Cal["dim_calendar\n(Dynamic date spine, Smart Date Key: YYYYMMDD)"]
+            D_Terr["dim_territories\n(Sales geographic territories)"]
             
-            F_Sales["fct_sales\n(Incremental Merge Fact: 1 PK = 1 Row)"]
-            F_Ret["fct_returns\n(Product returns fact)"]
+            F_Sales["fct_sales\n(Incremental Merge Fact: Dual-Key SCD2 + Business Key)"]
+            F_Ret["fct_returns\n(Product returns fact table)"]
         end
 
-        BronzeLayer --> StagingLayer
-        StagingLayer --> GoldLayer
+        BronzeLayer --> S_Src
+        BronzeLayer --> S_Snap
+        B_CDC --> S_CDC
+        BronzeLayer -->|Failed Validation| Q_Prod
+        S_Src --> GoldLayer
+        S_Snap --> D_Prod
+        S_CDC --> F_Sales
     end
 
     DLT_Init -->|write_disposition: replace| B_Dim
     DLT_Rep -->|write_disposition: replace| B_Dim
     DLT_CDC -->|write_disposition: append| B_CDC
 
-    subgraph S4 ["4. ANALYTICS & BUSINESS INTELLIGENCE"]
-        BI["Power BI / Tableau / Metabase\n• Revenue & Growth Trends (MoM, YoY)\n• Return Rate Analysis by Product & Region\n• Customer Segmentation by Demographics"]
+    subgraph S4 ["4. DATA QUALITY SHIELD (dbt Multi-Tier Testing)"]
+        direction TB
+        T_Gen["86 Generic Schema Tests\n(unique, not_null, accepted_values, relationships)"]
+        T_Sing["7 Singular Business Assertions\n(SCD2 overlap, anomaly, return chronology, margin)"]
+        T_Unit["3 Native dbt Unit Tests\n(Mock fixtures for SCD2 lookup, demographics, CDC)"]
     end
 
-    GoldLayer --> BI
+    GoldLayer -.->|Governed by| S4
+
+    subgraph S5 ["5. ANALYTICS & BUSINESS INTELLIGENCE"]
+        BI["Power BI / Tableau / Metabase & Ad-Hoc SQL (analyses/q01-q06)\n• Revenue & Growth Trends (MoM, YoY) • SCD2 Historical Profitability\n• Return Rate by Product & Region • Customer Segmentation"]
+    end
+
+    GoldLayer --> S5
 ```
 
 ---
@@ -84,13 +102,13 @@ flowchart TD
     subgraph Dimensions ["🌟 Conformed Dimension Tables (Gold Layer)"]
         DC["📅 <b>DIM_CALENDAR</b><br/>PK: date_key (YYYYMMDD)<br/>Hierarchies: Year, Quarter, Month, Day, Weekday"]
         DP["🚲 <b>DIM_PRODUCTS (SCD Type 2)</b><br/>PK: product_scd_key (dbt_scd_id)<br/>NK: product_key | Price, Cost, Category, Size"]
-        DU["👤 <b>DIM_CUSTOMERS</b><br/>PK: customer_key<br/>Demographics: Name, Gender, Birth Date, Income"]
+        DU["👤 <b>DIM_CUSTOMERS</b><br/>PK: customer_key<br/>Demographics: Name, Gender, Birth Date, Yearly Income"]
         DT["🌍 <b>DIM_TERRITORIES</b><br/>PK: territory_key<br/>Geography: Region, Country, Continent"]
     end
 
     subgraph Facts ["⚡ Core Fact Tables (Gold Layer)"]
-        FS["🛒 <b>FCT_SALES</b> (Incremental Merge)<br/>PK: order_number, order_line_item<br/>Measures: order_quantity<br/>SCD2 SK: product_scd_key"]
-        FR["📦 <b>FCT_RETURNS</b><br/>Measures: return_quantity<br/>SCD2 SK: product_scd_key"]
+        FS["🛒 <b>FCT_SALES</b> (Incremental Merge)<br/>PK: order_number, order_line_item<br/>Measures: order_quantity<br/>SCD2 SK: product_scd_key | NK: product_key"]
+        FR["📦 <b>FCT_RETURNS</b><br/>Measures: return_quantity<br/>FK: return_date_key, territory_key, product_key"]
     end
 
     DC -->|"order_date_key / stock_date_key (1:N)"| FS
@@ -99,7 +117,7 @@ flowchart TD
     DT -->|"territory_key (1:N)"| FS
 
     DC -->|"return_date_key (1:N)"| FR
-    DP -->|"product_scd_key (1:N)"| FR
+    DP -->|"product_key (1:N)"| FR
     DT -->|"territory_key (1:N)"| FR
 ```
 
@@ -114,7 +132,7 @@ erDiagram
     DIM_TERRITORIES ||--o{ FCT_SALES : "territory_key"
 
     DIM_CALENDAR ||--o{ FCT_RETURNS : "return_date_key = date_key"
-    DIM_PRODUCTS ||--o{ FCT_RETURNS : "product_scd_key (SCD2)"
+    DIM_PRODUCTS ||--o{ FCT_RETURNS : "product_key"
     DIM_TERRITORIES ||--o{ FCT_RETURNS : "territory_key"
 
     DIM_CALENDAR {
@@ -133,8 +151,10 @@ erDiagram
         string first_name "Customer First Name"
         string last_name "Customer Last Name"
         date birth_date "Date of Birth"
-        string gender "Gender (M / F)"
-        decimal annual_income "Annual Income"
+        string marital_status "Single, Married, Divorced, Widowed"
+        string gender "Gender (Male, Female)"
+        decimal yearly_income "Yearly Income in USD"
+        boolean is_home_owner "Homeownership Indicator"
     }
 
     DIM_PRODUCTS {
@@ -145,12 +165,12 @@ erDiagram
         string category_name "Category (e.g. Bikes, Accessories)"
         string subcategory_name "Subcategory (e.g. Mountain Bikes)"
         string product_size "Normalized Size Value"
-        string product_size_type "Size Domain (Clothing / Frame / No Size)"
-        string product_style "Style (Unisex / Women / Men)"
+        string product_size_type "Size Domain (Clothing / Frame (cm) / No Size)"
+        string product_style "Style (Unisex / Women / Men / N/A)"
         decimal product_cost "Historical Unit Cost at Snapshot"
         decimal product_price "Historical Unit Price at Snapshot"
-        int valid_from_date_key "SCD2 Valid From (YYYYMMDD / 19000101)"
-        int valid_to_date_key "SCD2 Valid To (YYYYMMDD / NULL)"
+        int dbt_valid_from "SCD2 Valid From Key (YYYYMMDD / 19000101)"
+        int dbt_valid_to "SCD2 Valid To Key (YYYYMMDD / NULL)"
     }
 
     DIM_TERRITORIES {
@@ -176,8 +196,7 @@ erDiagram
     FCT_RETURNS {
         int return_date_key FK "Return Date Key (links to DIM_CALENDAR)"
         int territory_key FK "Territory Key (links to DIM_TERRITORIES)"
-        string product_scd_key FK "SCD2 Surrogate Key (links to DIM_PRODUCTS)"
-        int product_key "Business Key"
+        int product_key FK "Business Key (links to DIM_PRODUCTS)"
         int return_quantity "Quantity Returned"
     }
 ```
@@ -186,6 +205,7 @@ erDiagram
 1. **Kimball Pure SCD Type 2 via Surrogate Key:** Rather than storing only `product_key` and forcing downstream analytics to run expensive non-equi range joins (`BETWEEN valid_from AND valid_to`), `fct_sales` materializes the Point-in-Time version key (`product_scd_key = p.dbt_scd_id`). All BI queries execute lightning-fast $O(1)$ equi-joins with zero memory spilling.
 2. **Dual-Key Strategy:** Both `product_scd_key` (Historical As-Was) and `product_key` (Current As-Is) are retained in Fact tables, granting maximum analytical flexibility.
 3. **Smart Integer Date Keys:** Integer-encoded dates (`YYYYMMDD`) eliminate time-zone translation overhead and maximize Snowflake micro-partition pruning.
+4. **Data Quarantine Pattern (DLQ):** Faulty product records are isolated into `QUARANTINE.QUARANTINE_PRODUCTS` with clear error reasons, ensuring pristine data quality in downstream dimensions.
 
 ---
 
@@ -227,18 +247,28 @@ adventure_works/
 │   │   └── q06.sql                  # Q6: Gross margin & profitability by subcategory
 │   ├── macros/
 │   │   └── generate_schema_name.sql # Custom schema name resolution macro
+│   ├── tests/                       # [SINGULAR BUSINESS ASSERTION TESTS]
+│   │   ├── assert_dim_products_no_scd2_overlap.sql  # Validates no overlapping validity intervals for SCD2
+│   │   ├── assert_future_birthday.sql               # Asserts birth dates cannot occur in the future
+│   │   ├── assert_nodedup_products.sql              # Asserts zero unexpected duplicate product records
+│   │   ├── assert_positive_gross_margin.sql         # Verifies product price >= product cost (no selling at loss)
+│   │   ├── assert_return_after_first_order.sql      # Asserts first return date cannot precede first sale date
+│   │   ├── assert_sales_data_is_fresh.sql           # Asserts sales events are fresh within threshold
+│   │   └── assert_sales_volume_anomaly.sql          # Statistical anomaly detection on daily sales volumes
 │   ├── models/
 │   │   ├── sources.yml              # Declaration of Snowflake BRONZE source tables
-│   │   ├── schema.yml               # 30 automated data tests & column documentation
-│   │   ├── src/                     # [STAGING LAYER - BRONZE_STAGING SCHEMA]
+│   │   ├── schema.yml               # 86 automated data tests & column documentation
+│   │   ├── src/                     # [STAGING LAYER - BRONZE_STAGING & QUARANTINE]
 │   │   │   ├── src_calendar.sql
 │   │   │   ├── src_customers.sql
 │   │   │   ├── src_product_categories.sql
 │   │   │   ├── src_product_subcategories.sql
 │   │   │   ├── src_products.sql
+│   │   │   ├── quarantine_products.sql # Data Quality Quarantine / Dead Letter Queue table (QUARANTINE schema)
 │   │   │   ├── src_returns.sql
 │   │   │   ├── src_sales.sql        # Baseline staging for historical sales
 │   │   │   ├── src_cdc_sales.sql    # CDC log deduplication by LSN
+│   │   │   ├── _src_cdc_sales__unit_tests.yml # Native dbt unit tests for CDC deduplication logic
 │   │   │   ├── src_territories.sql
 │   │   │   ├── src__dlt_loads.sql
 │   │   │   ├── src__dlt_pipeline_state.sql
@@ -246,10 +276,13 @@ adventure_works/
 │   │   ├── dim/                     # [GOLD LAYER - DIMENSIONS]
 │   │   │   ├── dim_calendar.sql     # Rich date dimension (Date Key, Year, Quarter, Month, Weekday)
 │   │   │   ├── dim_customers.sql    # Cleaned customer profiles, birth_date
-│   │   │   ├── dim_products.sql     # Flattened product catalog, normalized size & style
+│   │   │   ├── _dim_customers__unit_tests.yml # Unit tests for demographic normalization (gender, marital_status)
+│   │   │   ├── dim_products.sql     # Flattened product catalog with Kimball Pure SCD2 (product_scd_key)
+│   │   │   ├── _dim_products__unit_tests.yml  # Unit tests for sizing & style normalization
 │   │   │   └── dim_territories.sql  # Geographic sales territory dimension
 │   │   └── fct/                     # [GOLD LAYER - FACTS]
-│   │       ├── fct_sales.sql        # Incremental Merge Fact (combining baseline + CDC events)
+│   │       ├── fct_sales.sql        # Incremental Merge Fact with Point-in-time SCD2 lookup
+│   │       ├── _fct_sales__unit_tests.yml     # Unit tests for SCD2 Point-in-time lookup logic
 │   │       └── fct_returns.sql      # Product returns fact table
 │   └── snapshots/
 │       └── snap_products.sql        # SCD Type 2 snapshot tracking price & cost history
@@ -345,10 +378,10 @@ The ingestion layer uses **`dlt` (data load tool)** with **RSA Key-Pair Authenti
 
 ## 7. Phase 4: Data Modeling & Transformation with dbt Core
 
-The transformation layer adopts the **Medallion Architecture (Bronze &rarr; Staging &rarr; Gold)** and **Kimball Star Schema**:
+The transformation layer adopts the **Medallion Architecture (Bronze &rarr; Staging &rarr; Gold)**, **Kimball Star Schema**, and an automated **Data Quarantine Pattern**:
 
 ### 7.1. Staging Layer (`BRONZE_STAGING` Schema):
-Consists of 12 views (`src_*.sql`) providing preliminary cleaning, casting, and renaming.
+Consists of 11 views (`src_*.sql`) providing preliminary cleaning, casting, and renaming.
 
 * **CDC Deduplication Algorithm in [`src_cdc_sales.sql`](dbt_project/models/src/src_cdc_sales.sql):**
   Discards obsolete `UPDATE_BEFORE` records (`_operation = 3`) and isolates the latest event per order line using window functions:
@@ -359,105 +392,59 @@ Consists of 12 views (`src_*.sql`) providing preliminary cleaning, casting, and 
   ) AS rn
   ```
 
-### 7.2. SCD Type 2 Snapshot ([`snapshots/snap_products.sql`](dbt_project/snapshots/snap_products.sql)):
+### 7.2. Data Quarantine Pattern (`QUARANTINE` Schema):
+* **Dead Letter Queue (`quarantine_products.sql`):** Implements automated error trapping for product data quality violations. Rather than halting pipelines, dirty records are diverted into `QUARANTINE.QUARANTINE_PRODUCTS` with descriptive `error_reason` tags:
+  * Missing primary key (`product_key IS NULL`)
+  * Blank or whitespace product names (`TRIM(product_name) = ''`)
+  * Invalid pricing (`product_price <= 0`)
+  * Margin inversion warning (`product_cost > product_price` selling at loss)
+* Ensures downstream Dimension and Fact tables only consume pristine, verified master data.
+
+### 7.3. SCD Type 2 Snapshot ([`snapshots/snap_products.sql`](dbt_project/snapshots/snap_products.sql)):
 Applies dbt snapshot `check` strategy on pricing columns (`product_price`, `product_cost`) to capture price change history over time (`dbt_valid_from`, `dbt_valid_to`).
 
-### 7.3. Gold Layer: Kimball Star Schema Details
+### 7.4. Gold Layer: Kimball Star Schema Details
 
-*(See [Section 2: Dimensional Data Model](#2-dimensional-data-model-kimball-star-schema) for full topology and column definitions).*
+*(See [Section 2: Dimensional Data Model](#2-dimensional-data-model-kimball-star-schema) for full topology, ER diagram, and column definitions).*
 
-```mermaid
-erDiagram
-    DIM_CALENDAR ||--o{ FCT_SALES : "order_date_key = date_key"
-    DIM_CALENDAR ||--o{ FCT_SALES : "stock_date_key = date_key"
-    DIM_CUSTOMERS ||--o{ FCT_SALES : "customer_key"
-    DIM_PRODUCTS ||--o{ FCT_SALES : "product_scd_key (SCD2)"
-    DIM_TERRITORIES ||--o{ FCT_SALES : "territory_key"
-
-    DIM_CALENDAR ||--o{ FCT_RETURNS : "return_date_key = date_key"
-    DIM_PRODUCTS ||--o{ FCT_RETURNS : "product_scd_key (SCD2)"
-    DIM_TERRITORIES ||--o{ FCT_RETURNS : "territory_key"
-
-    DIM_CALENDAR {
-        int date_key PK
-        date full_date
-        int year
-        int quarter
-        int month
-        string month_name
-        string day_name
-        boolean is_weekend
-    }
-
-    DIM_CUSTOMERS {
-        int customer_key PK
-        string first_name
-        string last_name
-        date birth_date
-        string gender
-        decimal annual_income
-    }
-
-    DIM_PRODUCTS {
-        string product_scd_key PK
-        int product_key
-        string product_name
-        string category_name
-        string subcategory_name
-        string product_size
-        string product_size_type
-        string product_style
-        decimal product_price
-        decimal product_cost
-        int valid_from_date_key
-        int valid_to_date_key
-    }
-
-    DIM_TERRITORIES {
-        int territory_key PK
-        string region
-        string country
-        string continent
-    }
-
-    FCT_SALES {
-        string order_number PK
-        int order_line_item PK
-        int order_date_key FK
-        int stock_date_key FK
-        string product_scd_key FK
-        int product_key
-        int customer_key FK
-        int territory_key FK
-        int order_quantity
-        boolean is_deleted
-    }
-
-    FCT_RETURNS {
-        int return_date_key FK
-        int territory_key FK
-        string product_scd_key FK
-        int product_key
-        int return_quantity
-    }
-```
-
-#### Gold Dimension & Fact Details:
+#### Gold Dimension & Fact Summary:
 1. **`dim_calendar`**: Rich time dimension table generated dynamically from `2000-01-01` through `CURRENT_DATE()` using Snowflake's `TABLE(GENERATOR())` in `src_calendar`. Produces integer **Smart Date Keys** (`YYYYMMDD`), allowing Fact tables to link to time attributes without expensive SQL joins.
-2. **`dim_customers`**: Demographic profiles for 18,148 customers with normalized `birth_date` cast to `DATE`.
-3. **`dim_products`**: Denormalized (flattened) catalog joining products, subcategories, and categories. Tracks pricing history via SCD Type 2 (`product_scd_key`). Standardizes mixed alphanumeric sizes (`Clothing` vs. `Frame (cm)`) and style codes (`Unisex`, `Women`, `Men`).
+2. **`dim_customers`**: Demographic profiles for 18,148 customers with normalized `birth_date` cast to `DATE`, standardized marital statuses, and gender.
+3. **`dim_products`**: Denormalized (flattened) catalog joining products, subcategories, and categories. Tracks pricing history via **Kimball Pure SCD Type 2 Surrogate Keys (`product_scd_key = p.dbt_scd_id`)**. Standardizes mixed alphanumeric sizes (`Clothing` vs. `Frame (cm)`) and style codes (`Unisex`, `Women`, `Men`, `N/A`).
 4. **`dim_territories`**: 10 global sales regions with unified `territory_key`.
-5. **`fct_sales`**: Transactional sales fact table utilizing **Incremental Merge Strategy**. Captures point-in-time pricing via `product_scd_key`. Initial run ingests 23,935 baseline orders; subsequent runs execute a `MERGE INTO` statement on `(order_number, order_line_item)` using CDC events, preventing revenue duplication.
+5. **`fct_sales`**: Transactional sales fact table utilizing **Incremental Merge Strategy**. Features **Dual-Key Strategy**: stores `product_scd_key` for point-in-time pricing and `product_key` for current-state analysis. Initial run ingests 23,935 baseline orders; subsequent runs execute a `MERGE INTO` statement on `(order_number, order_line_item)` using CDC events.
 6. **`fct_returns`**: Product returns fact table tracking 1,809 return records to measure Return Rates.
 
 ---
 
-## 8. Phase 5: Data Quality Testing & Governance
+## 8. Phase 5: Multi-Tiered Data Quality Testing, Governance & Unit Testing
 
-Configured in [`models/schema.yml`](dbt_project/models/schema.yml) with **30 automated data tests**:
-- **Uniqueness & Not-Null:** Enforced across all primary keys in both Dimension and Fact models.
-- **Referential Integrity (`relationships`):** Verifies that `fct_sales.customer_key` exists in `dim_customers`.
-- **Accepted Values:** Validates categorical domain values, such as customer gender (`gender IN ['M', 'F']`) and CDC operation codes (`_operation IN [1, 2, 3, 4]`).
+The platform enforces an **Enterprise 4-Tier Data Quality Framework** combining automated schema tests, custom business assertions, native unit tests, and quarantine routing:
+
+### 8.1. Tier 1: Generic Schema Tests (`models/schema.yml` - 86 Tests)
+* **Uniqueness & Not-Null:** Enforced across all primary keys and surrogate keys (`product_scd_key`, `date_key`, `customer_key`, `territory_key`, composite `(order_number, order_line_item)`).
+* **Referential Integrity (`relationships`):** Verifies all Fact table foreign keys strictly reference existing Dimension primary keys.
+* **Domain Values (`accepted_values`):** Validates categorical values, including gender (`Male`, `Female`), marital status (`Single`, `Married`, `Divorced`, `Widowed`), CDC operation codes (`1, 2, 3, 4`), product size domains, and product style codes.
+
+### 8.2. Tier 2: Singular Business Assertion Tests (`dbt_project/tests/` - 7 Tests)
+Custom SQL assertion tests enforcing enterprise business invariants:
+1. **`assert_dim_products_no_scd2_overlap.sql`**: Mathematically proves that SCD Type 2 validity intervals `[dbt_valid_from, dbt_valid_to)` for the same product never overlap in time.
+2. **`assert_future_birthday.sql`**: Asserts customer birth dates must never exceed `CURRENT_DATE()`.
+3. **`assert_nodedup_products.sql`**: Guarantees zero unexpected duplicate records exist in staging products.
+4. **`assert_positive_gross_margin.sql`**: Verifies that unit list price is strictly greater than or equal to unit cost.
+5. **`assert_return_after_first_order.sql`**: Asserts that a product's first recorded return date cannot precede its earliest historical sale date in `fct_sales`.
+6. **`assert_sales_data_is_fresh.sql`**: Asserts that transactional data arrives within acceptable operational latency SLAs.
+7. **`assert_sales_volume_anomaly.sql`**: Statistical rolling window test detecting abnormal spikes or drops in daily sales volume.
+
+### 8.3. Tier 3: Native dbt Unit Tests (Mock Fixtures)
+Pre-deployment transformation testing isolating logic with synthetic data fixtures (without scanning warehouse data):
+1. **`_dim_customers__unit_tests.yml`**: Tests gender and marital status normalization logic against edge cases (NULLs, unexpected codes).
+2. **`_dim_products__unit_tests.yml`**: Tests alphanumeric size categorization (`Clothing`, `Frame (cm)`, `No Size`) and style fallback logic.
+3. **`_fct_sales__unit_tests.yml`**: Tests point-in-time SCD Type 2 surrogate key resolution across price change boundaries.
+4. **`_src_cdc_sales__unit_tests.yml`**: Tests CDC LSN deduplication and delete tombstone flagging (`_operation = 1` &rarr; `is_deleted = TRUE`).
+
+### 8.4. Tier 4: Data Quarantine & Observability
+Faulty records are trapped and materialized in `QUARANTINE.QUARANTINE_PRODUCTS` for root-cause analysis without contaminating downstream analytical dashboards.
 
 ---
 
@@ -498,14 +485,20 @@ dbt snapshot
 dbt run --select fct_sales --full-refresh
 dbt run
 
-# 3. Execute all 30 automated data quality tests
+# 3. Execute all automated data quality tests (86 schema tests + 7 singular assertions)
 dbt test
 
-# 4. Preview model outputs directly in terminal without opening Snowflake UI
+# 4. Execute isolated dbt unit tests (fast mock verification)
+dbt test --select "test_type:unit"
+
+# 5. Execute singular business invariant tests
+dbt test --select "test_type:singular"
+
+# 6. Preview model outputs directly in terminal without opening Snowflake UI
 dbt show --select dim_customers --limit 5
 dbt show --select fct_sales --limit 5
 
-# 5. Generate and serve interactive documentation & lineage graph
+# 7. Generate and serve interactive documentation & lineage graph
 dbt docs generate
 dbt docs serve
 ```
