@@ -12,7 +12,7 @@ unit_tests:
       - input: ref('src_product_subcategories')
         rows: []
       - input: ref('src_product_categories')
-        rows: []
+        rows: [] 
     expect:
       rows:
         - {product_key: 1, product_size: 'M', product_size_type: 'Clothing', product_style: 'Unisex'}

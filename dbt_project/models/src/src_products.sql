@@ -28,9 +28,9 @@ select
     product_price
 from raw_products
 WHERE product_key IS NOT NULL
-   OR product_name IS NOT NULL 
-   OR TRIM(product_name) <> ''
-   OR product_price > 0
-   OR product_cost < product_price
+   AND product_name IS NOT NULL 
+   AND TRIM(product_name) <> ''
+   AND product_price > 0
+   AND product_cost <= product_price
 
 

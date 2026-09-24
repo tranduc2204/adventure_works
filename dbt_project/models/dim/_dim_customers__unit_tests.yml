@@ -10,11 +10,13 @@ unit_tests:
           - {customer_key: 1, marital_status: 'M', gender: 'F', home_owner: 'Y'}
           - {customer_key: 2, marital_status: 'X', gender: 'M', home_owner: 'N'}
           - {customer_key: 3, marital_status: null, gender: null, home_owner: null}
-
+      - input: ref('src_sales')
+        rows: []
     expect:
       rows: 
         - {customer_key: 1, marital_status: 'Married', gender: 'Female', is_home_owner: true}
         - {customer_key: 2, marital_status: 'N/A', gender: 'Male', is_home_owner: false}
-        - {customer_key: 3, marital_status: 'N/A', gender: 'N/A', is_home_owner: FALSE}    
+        - {customer_key: 3, marital_status: 'N/A', gender: 'N/A', is_home_owner: false}    
+        - {customer_key: -1, marital_status: 'N/A', gender: 'N/A', is_home_owner: false}
 
-    
+     

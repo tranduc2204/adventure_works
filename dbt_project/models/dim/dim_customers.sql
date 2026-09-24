@@ -55,11 +55,11 @@ inferred_customers as (
         0 AS total_children,
         'N/A' AS education_level,
         'N/A' AS occupation,
-        FALSE AS  is_home_owner,
-        TRUE AS is_inferred  -- Cờ đánh dấu: Khách này đến từ Fact trước khi có profile!
+        false AS  is_home_owner,
+        true AS is_inferred  -- Cờ đánh dấu: Khách này đến từ Fact trước khi có profile!
     from {{ ref('src_sales') }} s
     where s.customer_key is not null 
-        and s.customer_key not in (select customer_key from actual_customers )
+        and s.customer_key not in (select distinct customer_key from actual_customers where customer_key is not null)
 ),
 unknown_default_customer as (
     -- khách vãng lai hoặc order bi null customer_key 
@@ -77,8 +77,8 @@ unknown_default_customer as (
         0 AS total_children,
         'N/A' AS education_level,
         'N/A' AS occupation,
-        FALSE AS is_home_owner,
-        FALSE AS is_inferred
+        false AS is_home_owner,
+        false AS is_inferred
 
 )
 
@@ -87,8 +87,6 @@ UNION ALL
 SELECT * FROM inferred_customers
 UNION ALL
 SELECT * FROM unknown_default_customer
-
-
 
 
 

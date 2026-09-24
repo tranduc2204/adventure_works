@@ -44,5 +44,6 @@ WHERE product_key IS NULL
    OR product_name IS NULL 
    OR TRIM(product_name) = ''
    OR product_price <= 0
+   OR product_price IS NULL
    OR product_cost > product_price
 
