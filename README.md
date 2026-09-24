@@ -89,6 +89,148 @@ flowchart TB
     GoldLayer --> S5
 ```
 
+### 1.2. Functional Architecture & Quality Gates Map
+
+> **Operational & Verification Blueprint:** Comprehensive functional decomposition mapping the lifecycle of data flows, automated transformation capabilities, multi-layered quality control gates (Native Unit Tests, Generic Schema Validations, Singular Business Invariant Assertions), Airflow DAG orchestration, and downstream executive business intelligence.
+
+```mermaid
+flowchart TB
+    %% ==========================================
+    %% TẦNG 1: NGUỒN OLTP & CDC
+    %% ==========================================
+    subgraph T1 ["1. OLTP SOURCE & CDC STREAMING (SQL Server 2022 on Docker)"]
+        direction TB
+        CSV["8 Source CSV Files\n(data/ directory)"] -->|ingest.py\nBatch chunking & Type detection| SQL_DB["AdventureWorks Database\n(dbo schema)"]
+        SQL_DB -->|SQL Server Agent Capture Job| CDC_LOG["Change Table: cdc.dbo_sales_CT\n(Captures Insert/Update/Delete via LSN)"]
+    end
+
+    %% ==========================================
+    %% TẦNG 2: INGESTION PIPELINE (dlt)
+    %% ==========================================
+    subgraph T2 ["2. AUTOMATED DATA INGESTION (dlt - data load tool)"]
+        direction TB
+        DLT_Init["initial_snapshot.py\n(Baseline Full Sync: 8 tables)"]
+        DLT_Rep["replace_pipeline.py\n(Daily Batch Replace: Dimensions)"]
+        DLT_CDC["cdc_pipeline.py\n(Incremental CDC Stream by LSN: Append)"]
+    end
+
+    SQL_DB --> DLT_Init
+    SQL_DB --> DLT_Rep
+    CDC_LOG --> DLT_CDC
+
+    %% ==========================================
+    %% TẦNG 3: MEDALLION DATA WAREHOUSE (Snowflake + dbt Core)
+    %% ==========================================
+    subgraph T3 ["3. DATA WAREHOUSE & MODELING (Snowflake & dbt)"]
+        direction TB
+        
+        %% BRONZE
+        subgraph Bronze ["BRONZE SCHEMA (Raw Ingestion Layer)"]
+            B_Raw["8 Raw Tables\n+ Raw CDC Stream: DBO_SALES_CT"]
+        end
+
+        %% STAGING & SNAPSHOT
+        subgraph Staging ["BRONZE_STAGING SCHEMA (Cleaning & History Tracking)"]
+            direction TB
+            S_Calendar["src_calendar\n(Dynamic date spine: 2000 -> CURRENT_DATE)"]
+            S_CDC["src_cdc_sales\n(Deduplication by latest LSN & is_deleted flag)"]
+            S_Snap["snap_products (SCD Type 2)\n(Tracks historical price & cost changes over time)"]
+        end
+
+        %% QUARANTINE
+        subgraph Quarantine ["QUARANTINE SCHEMA (Dead Letter Queue)"]
+            Q_Prod["quarantine_products\n(Captures invalid/corrupt products:\n• NULL keys • Empty names • Price <= 0 • Selling at loss)"]
+        end
+
+        %% GOLD LAYER
+        subgraph Gold ["GOLD SCHEMA (Kimball Star Schema)"]
+            direction TB
+            D_Cal["dim_calendar\n(Smart Date Key YYYYMMDD, Hierarchies, Weekdays)"]
+            D_Cust["dim_customers\n(Demographics, Gender, Marital Status, Unknown Guest Member -1)"]
+            D_Prod["dim_products\n(Normalized Size/Style, Floor Date 1900-01-01, product_scd_key)"]
+            D_Terr["dim_territories\n(10 Global Sales Territories)"]
+            
+            F_Sales["fct_sales (Incremental Merge Fact)\n• Merge via composite PK: (order_number, order_line_item)\n• CDC Soft Delete Support (is_deleted)\n• Pure SCD2 Point-in-Time Key: product_scd_key"]
+            F_Ret["fct_returns\n(Product Returns Fact measuring return rates)"]
+        end
+
+        Bronze --> Staging
+        Bronze -->|Failed Validation| Quarantine
+        Staging --> Gold
+    end
+
+    DLT_Init --> Bronze
+    DLT_Rep --> Bronze
+    DLT_CDC --> Bronze
+
+    %% ==========================================
+    %% TẦNG 4: HỆ THỐNG KIỂM TRA CHẤT LƯỢNG (TESTING SUITE)
+    %% ==========================================
+    subgraph T4 ["4. MULTI-TIERED QUALITY CONTROL SHIELD (dbt Quality Gates)"]
+        direction TB
+        
+        subgraph UnitTests ["A. Unit Tests (Logic Code SQL - Mock Fixtures)"]
+            UT_Cust["_dim_customers__unit_tests\n(Validates CASE WHEN demographic mapping)"]
+            UT_Prod["_dim_products__unit_tests\n(Validates size categorization & SCD2 logic)"]
+            UT_Sales["_fct_sales__unit_tests\n(Validates Point-in-Time SCD2 resolution)"]
+            UT_CDC["_src_cdc_sales__unit_tests\n(Validates CDC LSN deduplication & delete flags)"]
+        end
+
+        subgraph GenericTests ["B. Generic Data Tests (schema.yml - Snowflake Data)"]
+            GT_PK["Unique & Not Null\n(Protects all Primary & Surrogate Keys)"]
+            GT_FK["Referential Integrity (relationships)\n(Fact -> Dim Customers/Products/Calendar)"]
+            GT_Val["Accepted Values\n(Gender, Marital Status, CDC Operation 1-4)"]
+        end
+
+        subgraph SingularTests ["C. Singular Business Tests (tests/*.sql - Business Invariants)"]
+            ST_Return["assert_return_after_first_order\n(Returns must not precede first historical sale)"]
+            ST_Birth["assert_future_birthday\n(Guards against future customer birth dates)"]
+            ST_SCD["assert_dim_products_no_scd2_overlap\n(Detects overlapping intervals in SCD Type 2)"]
+            ST_Fresh["assert_sales_data_is_fresh\n(Detects stale ingestion data > 24h)"]
+            ST_Vol["assert_sales_volume_anomaly\n(Detects abnormal drops in daily order volume)"]
+        end
+    end
+
+    Gold -.->|Governed by| T4
+
+    %% ==========================================
+    %% TẦNG 5: ORCHESTRATION (Airflow) & BI
+    %% ==========================================
+    subgraph T5 ["5. PIPELINE ORCHESTRATION & EXECUTIVE ANALYTICS"]
+        direction TB
+        
+        subgraph Airflow ["Apache Airflow (Docker Compose Orchestration)"]
+            DAG1["dag_adventureworks_cdc_sales (Every 30 mins)\n• dlt CDC Ingest -> dbt Incremental Fact Merge -> Test Fact"]
+            DAG2["dag_adventureworks_daily_dimensions (01:00 AM Daily)\n• dlt Master Sync -> dbt SCD2 Snapshot -> Build Dims -> Tests"]
+        end
+
+        subgraph Analyses ["Executive Ad-Hoc Analytics (dbt analyses)"]
+            Q1["Q1: Total Gross Sales Revenue (CFO)"]
+            Q2["Q2: Category Revenue Ranking (Head of Merchandising)"]
+            Q4["Q4: Total Returned Goods Quantity (Head of Quality)"]
+            Q5["Q5: Product Color Distribution & Share (% of catalog)"]
+            Q6["Q6: Gross Margin & Profitability by Subcategory (CFO)"]
+        end
+    end
+
+    T3 --> T5
+    Airflow -->|Triggers & Coordinates| T2
+    Airflow -->|Triggers & Coordinates| T3
+```
+
+#### Functional Capability & Verification Matrix
+
+| Functional Pillar | Core Capabilities & Business Responsibilities | Active Verification & Quality Control Gates |
+| :--- | :--- | :--- |
+| **1. OLTP Simulation & CDC** | • Dockerized SQL Server 2022 hosting enterprise `AdventureWorks` database.<br/>• Automated ingestion of 8 CSV datasets with type detection and batch chunking (`chunksize=1000`).<br/>• SQL Server Agent capture job tracking row mutations (`INSERT`, `UPDATE`, `DELETE`) on `dbo.sales` via LSNs. | • Active healthcheck polling port `1433`.<br/>• Verification of CDC database enablement (`sys.sp_cdc_enable_db`).<br/>• Strict composite primary key enforcement `(order_number, order_line_item)`. |
+| **2. Automated Ingestion (dlt)** | • **Baseline Full Sync:** Ingests initial 8 tables into Snowflake `BRONZE`.<br/>• **Periodic Master Replace:** Refreshes 7 dimension tables with `write_disposition="replace"`.<br/>• **Incremental CDC Streaming:** Continuously extracts new LSNs from `cdc.dbo_sales_CT` with `write_disposition="append"`. | • RSA Key-Pair authentication healthchecks with Snowflake.<br/>• LSN checkpoint persistence to guarantee zero data loss.<br/>• Schema evolution and precision hints on raw JSON extraction. |
+| **3. Staging & SCD2 Tracking** | • 11 Staging views (`src_*.sql`) performing column casting, renaming, and cleaning.<br/>• CDC deduplication isolating the latest transaction state via `ROW_NUMBER() OVER (...)`.<br/>• dbt snapshot (`snap_products`) tracking historical price and cost mutations (SCD Type 2).<br/>• Dynamic calendar generation from `2000-01-01` to `CURRENT_DATE()` via Snowflake `GENERATOR`. | • **Unit Test:** `_src_cdc_sales__unit_tests.yml` validates LSN ordering and delete flag generation.<br/>• **Singular Test:** `assert_dim_products_no_scd2_overlap.sql` guarantees zero overlapping validity windows. |
+| **4. Quarantine Dead Letter Queue** | • Automated trap routing corrupt or dirty product records into `QUARANTINE.QUARANTINE_PRODUCTS`.<br/>• Tags each record with explicit audit reasons (`Missing Key`, `Negative Price`, `Cost > Price`).<br/>• Isolates upstream errors without halting production pipeline execution. | • Ensures downstream Gold Dimensions and Facts consume 100% verified, clean master records.<br/>• Supports operational alerting for inventory and catalog teams. |
+| **5. Gold Star Schema (Kimball)** | • **4 Conformed Dimensions:** `dim_calendar` (Smart Date Keys), `dim_customers` (demographics), `dim_products` (pure SCD2 surrogate keys), `dim_territories`.<br/>• **2 Core Facts:** `fct_sales` (Incremental Merge with soft-deletes) and `fct_returns`.<br/>• **Floor Date Normalization (`1900-01-01`):** Resolves historical sales matching across SCD2 boundaries.<br/>• **Unknown Dimension Support (`-1`):** Protects 100% of revenue from guest checkout transactions. | • **Generic Tests:** 86 automated `unique`, `not_null`, and `accepted_values` checks.<br/>• **Referential Integrity:** `relationships` tests strictly enforce all foreign keys point to valid dimension keys.<br/>• **Unit Test:** `_fct_sales__unit_tests.yml` verifies point-in-time surrogate key lookup logic. |
+| **6. Data Observability & Anomaly Guard** | • Protects against silent data pipeline failures and stale ingestion streams.<br/>• Compares transactional arrival times against operational SLAs.<br/>• Rolling 7-day statistical anomaly detection on daily sales volumes. | • **Singular Test:** `assert_sales_data_is_fresh.sql` flags errors when data is older than 24 hours.<br/>• **Singular Test:** `assert_sales_volume_anomaly.sql` triggers alerts if order volume drops below 30% of normal.<br/>• **Singular Test:** `assert_return_after_first_order.sql` enforces chronological validity. |
+| **7. Airflow Orchestration & Alerting** | • Full Docker Compose environment (Webserver, Scheduler, Triggerer, PostgreSQL).<br/>• **`dag_adventureworks_cdc_sales`:** High-frequency 30-minute incremental CDC sync & fact merge.<br/>• **`dag_adventureworks_daily_dimensions`:** Daily 01:00 AM batch sync for master dimensions and SCD2 snapshots. | • Isolated Python virtual environment (`Dockerfile.airflow`).<br/>• Automatic retry on network hiccups (`retries=2, retry_delay=3m`).<br/>• Readiness for Slack/Telegram webhook failure alerting. |
+| **8. Executive Business Analytics** | • Production-ready ad-hoc analytical queries (`analyses/q01.sql` through `q06.sql`).<br/>• Answers strategic questions for Chief Financial Officer (CFO), Head of Merchandising, and Quality Assurance. | • Resolves SCD2 Point-in-Time joins without inflating revenue.<br/>• Direct terminal preview via `dbt show` and SQL compilation via `dbt compile`. |
+
 ---
 
 ## 2. Dimensional Data Model (Kimball Star Schema)
