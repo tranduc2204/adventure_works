@@ -2,7 +2,7 @@
 {{ config(
     materialized = 'incremental',
     unique_key = ['order_number', 'order_line_item'],
-    incremental_strategy = 'merge'
+    incremental_strategy = 'merge', 
 
 
     post_hook = "
