@@ -1,6 +1,6 @@
 version: 2
 sources:
-  - name: raw
+  - name: sqlserver
     database: ADVENTUREWORKS
     schema: RAW
     description: "Adventure Works is a sample database provided by Microsoft that demonstrates the capabilities of SQL Server and other Microsoft data platform technologies. It contains a fictional company that sells bicycles and related products, and includes various tables and views that represent the company's sales, production, and customer data."
@@ -25,12 +25,7 @@ sources:
         description: "Raw CDC change table for products streaming from SQL Server."
       - name: DBO_SALES_CT
         description: "Raw CDC change table for sales transactions streaming from SQL Server."
-      - name: _DLT_LOADS
-        description: "The _DLT_LOADS table is a system table used by Delta Live Tables to track the progress of data loads. It contains information about the status of each load, including the start and end times, the number of records processed, and any errors encountered during the load process."
-      - name: _DLT_PIPELINE_STATE
-        description: "The _DLT_PIPELINE_STATE table is a system table used by Delta Live Tables to track the state of the pipeline. It contains information about the current state of the pipeline, including the last successful load, the last failed load, and any errors encountered during the load process."
-      - name: _DLT_VERSION
-  
+      
 
 
 

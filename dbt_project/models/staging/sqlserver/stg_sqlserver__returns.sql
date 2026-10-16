@@ -5,7 +5,7 @@ with raw_returns as (
         cast (territory_key as bigint) as territory_key,
         cast (product_key as bigint) as product_key,
         cast (return_quantity as bigint) as return_quantity
-    from {{ source('raw', 'returns') }}
+    from {{ source('sqlserver', 'returns') }}
 )
 select 
     return_date_key,

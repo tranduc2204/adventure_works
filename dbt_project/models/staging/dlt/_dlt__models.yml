@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  # ============================================================================
+  # DLT METADATA STAGING (STAGING VIEWS)
+  # ============================================================================
+  - name: stg_dlt__loads
+    description: "Staging model for dlt load history."
+    columns:
+      - name: load_id
+        data_tests:
+          - not_null
+      - name: status
+        data_tests:
+          - not_null
+
+  - name: stg_dlt__pipeline_state
+    description: "Staging model for dlt pipeline state snapshots."
+
+  - name: stg_dlt__version
+    description: "Staging model for dlt schema versions."

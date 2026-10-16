@@ -4,7 +4,7 @@ WITH raw_territories AS (
         cast (region as varchar) AS region,
         cast (country as varchar) AS country,
         cast (continent as varchar) AS continent
-    FROM {{ source('raw', 'TERRITORIES') }}
+    FROM {{ source('sqlserver', 'TERRITORIES') }}
 )
 
 SELECT 

@@ -60,14 +60,6 @@ models:
               config:
                 serverity: warn 
 
-  - name: stg_sqlserver__calendar
-    description: "Staging model generating daily calendar spine."
-    columns:
-      - name: date
-        data_tests:
-          - unique
-          - not_null
-
   - name: stg_sqlserver__territories
     description: "Staging model for raw sales territories."
     columns:

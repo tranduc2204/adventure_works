@@ -12,7 +12,7 @@ with raw_sales as (
         cast (territory_key as bigint) as territory_key,
         cast (order_line_item as bigint) as order_line_item,
         cast (order_quantity as bigint) as order_quantity,
-    from {{ source('raw', 'sales') }}
+    from {{ source('sqlserver', 'sales') }}
 )
 select 
     order_date_key,

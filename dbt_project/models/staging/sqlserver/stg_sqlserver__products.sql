@@ -12,7 +12,7 @@ with raw_products as (
         cast (product_style as varchar) as product_style,
         cast (product_cost as decimal(18,2)) as product_cost,
         cast (product_price as decimal(18,2)) as product_price
-    from {{ source('raw', 'products') }}
+    from {{ source('sqlserver', 'products') }}
 )
 select 
     product_key,

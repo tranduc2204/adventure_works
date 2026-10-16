@@ -19,7 +19,7 @@ with raw_sales_cdc as (
             PARTITION BY order_number, order_line_item 
             ORDER BY _start_lsn DESC, _seqval DESC
         ) AS rn
-    from {{ source('raw', 'DBO_SALES_CT') }}
+    from {{ source('sqlserver', 'DBO_SALES_CT') }}
 )
 select 
     order_number,

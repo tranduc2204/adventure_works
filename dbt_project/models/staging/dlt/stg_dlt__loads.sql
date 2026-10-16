@@ -4,7 +4,7 @@ with raw__dlt_loads as (
         SCHEMA_NAME,
         STATUS,
         SCHEMA_VERSION_HASH
-    from {{ source('raw', '_DLT_LOADS') }}
+    from {{ source('dlt', '_DLT_LOADS') }}
 )
 select 
     LOAD_ID,

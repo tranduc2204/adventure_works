@@ -6,7 +6,7 @@
 WITH source_calendar AS (
     SELECT 
         cast(date as date) as full_date
-    FROM {{ ref('stg_sqlserver__calendar') }}
+    FROM {{ ref('int_calendar__date_spine') }}
 )
 
 SELECT

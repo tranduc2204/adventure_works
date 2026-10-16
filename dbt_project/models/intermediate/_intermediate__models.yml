@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  # ============================================================================
+  # INTERMEDIATE LAYER (EPHEMERAL)
+  # ============================================================================
+  - name: int_calendar__date_spine
+    description: "Daily date spine generated from 2000-01-01 to CURRENT_DATE (Snowflake GENERATOR)."
+    columns:
+      - name: date
+        data_tests:
+          - unique
+          - not_null
