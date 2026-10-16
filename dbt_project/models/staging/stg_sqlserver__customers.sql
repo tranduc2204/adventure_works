@@ -13,7 +13,7 @@ with raw_customers as (
         cast (education_level as varchar) as education_level,
         cast (occupation as varchar) as occupation,
         cast (home_owner as varchar) as home_owner
-    from {{ source('BRONZE', 'customers') }}
+    from {{ source('raw', 'customers') }}
 )
 select 
     customer_key,

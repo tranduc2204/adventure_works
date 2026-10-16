@@ -21,5 +21,5 @@ select
     product_style,
     product_cost,
     product_price
-from {{ ref('src_products') }}
+from {{ ref('stg_sqlserver__products') }}
 {% endsnapshot %}

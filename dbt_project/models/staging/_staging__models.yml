@@ -1,0 +1,119 @@
+version: 2
+
+models:
+  # ============================================================================
+  # BRONZE STAGING LAYER (STAGING VIEWS)
+  # ============================================================================
+  - name: stg_sqlserver__sales
+    description: "Staging model for baseline historical sales transactions."
+    columns:
+      - name: order_number
+        data_tests:
+          - not_null
+      - name: order_line_item
+        data_tests:
+          - not_null
+      - name: order_date_key
+        data_tests:
+          - not_null
+      - name: product_key
+        data_tests:
+          - not_null
+      - name: customer_key
+        data_tests:
+          - not_null
+
+  - name: stg_sqlserver__sales_cdc
+    description: "Staging model deduplicating CDC log events from dbo_sales_ct to retrieve the latest transaction state."
+    columns:
+      - name: order_number
+        data_tests:
+          - not_null
+      - name: order_line_item
+        data_tests:
+          - not_null
+      - name: _operation
+        description: "CDC operation code: 1 (DELETE), 2 (INSERT), 3 (UPDATE_BEFORE), 4 (UPDATE_AFTER)."
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      - name: is_deleted
+        description: "True if operation is 1 (DELETE), otherwise False."
+        data_tests:
+          - not_null
+
+  - name: stg_sqlserver__customers
+    description: "Staging model for raw customer data."
+    columns:
+      - name: customer_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_sqlserver__products
+    description: "Staging model for raw product catalog."
+    columns:
+      - name: product_key
+        data_tests:
+          - not_null:
+              config:
+                serverity: warn 
+
+  - name: stg_sqlserver__calendar
+    description: "Staging model generating daily calendar spine."
+    columns:
+      - name: date
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_sqlserver__territories
+    description: "Staging model for raw sales territories."
+    columns:
+      - name: sales_territory_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_sqlserver__returns
+    description: "Staging model for product returns."
+    columns:
+      - name: return_date_key
+        data_tests:
+          - not_null
+      - name: product_key
+        data_tests:
+          - not_null
+      - name: territory_key
+        data_tests:
+          - not_null
+
+  - name: stg_sqlserver__product_categories
+    description: "Staging model for top-level product categories."
+    columns:
+      - name: product_category_key
+        data_tests:
+          - unique
+          - not_null
+      - name: category_name
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_sqlserver__product_subcategories
+    description: "Staging model for granular product subcategories."
+    columns:
+      - name: product_subcategory_key
+        data_tests:
+          - unique
+          - not_null
+      - name: subcategory_name
+        data_tests:
+          - not_null
+      - name: product_category_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_sqlserver__product_categories')
+              field: product_category_key

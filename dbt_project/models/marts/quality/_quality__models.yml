@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: fct_returns
+    description: "Product returns transaction fact table."
+    columns:
+      - name: return_date_key
+        description: "Foreign key referencing dim_calendar."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_calendar')
+                field: date_key
+      - name: territory_key
+        description: "Foreign key referencing dim_territories."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_territories')
+                field: territory_key
+      - name: product_key
+        description: "Foreign key referencing dim_products."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_key
+      - name: return_quantity
+        description: "Number of units returned."
+        data_tests:
+          - not_null

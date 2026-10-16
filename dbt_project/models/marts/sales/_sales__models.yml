@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: fct_sales
+    description: "Core transactional sales fact table built incrementally by merging baseline sales and CDC events."
+    columns:
+      - name: order_number
+        description: "Order number identifying the transaction."
+        data_tests:
+          - not_null
+      - name: order_line_item
+        description: "Line item sequence number within the order."
+        data_tests:
+          - not_null
+      - name: order_date_key
+        description: "Foreign key referencing dim_calendar for order placement date."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_calendar')
+              field: date_key
+      - name: stock_date_key
+        description: "Foreign key referencing dim_calendar for stock date."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_calendar')
+              field: date_key
+      - name: customer_key
+        description: "Foreign key referencing dim_customers."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_key
+      - name: PRODUCT_SCD_KEY
+        description: ""
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: PRODUCT_SCD_KEY
+      - name: product_key
+        description: "Business key identifying the product (supports SCD1 current-state analyses)."
+        data_tests:
+          - not_null
+      - name: territory_key
+        description: "Foreign key referencing dim_territories."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_territories')
+              field: territory_key
+      - name: order_quantity
+        description: "Number of units ordered."
+        data_tests:
+          - not_null
+      - name: is_deleted
+        description: "Soft-delete / tombstone flag indicating whether the record was cancelled or deleted via CDC."
+        data_tests:
+          - not_null

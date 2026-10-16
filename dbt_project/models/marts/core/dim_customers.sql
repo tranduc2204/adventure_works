@@ -36,7 +36,7 @@ with actual_customers as (
         END AS is_home_owner,
         -- hỗ trợ alert cho airflow. hôm trước có bao nhiu khách hàng mua hàng trước khi được update data từ crm 
         FALSE AS is_inferred  -- Khách hàng thật, đầy đủ thông tin
-    from {{ ref('src_customers') }}
+    from {{ ref('stg_sqlserver__customers') }}
 ),
 
 inferred_customers as (
@@ -57,7 +57,7 @@ inferred_customers as (
         'N/A' AS occupation,
         false AS  is_home_owner,
         true AS is_inferred  -- Cờ đánh dấu: Khách này đến từ Fact trước khi có profile!
-    from {{ ref('src_sales') }} s
+    from {{ ref('stg_sqlserver__sales') }} s
     where s.customer_key is not null 
         and s.customer_key not in (select distinct customer_key from actual_customers where customer_key is not null)
 ),

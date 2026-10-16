@@ -3,4 +3,4 @@ select
         TERRITORY_KEY,
         PRODUCT_KEY,
         RETURN_QUANTITY
-from {{ ref('src_returns')  }}
+from {{ ref('stg_sqlserver__returns')  }}

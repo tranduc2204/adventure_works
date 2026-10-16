@@ -5,7 +5,7 @@ unit_tests:
       macros:
         is_incremental: false 
     given: 
-      - input: ref('src_sales')
+      - input: ref('stg_sqlserver__sales')
         rows:
           - {order_number: 'SO-101', order_line_item: 1, order_date_key: 20240515, product_key: 100, order_quantity: 1}
       - input: ref('dim_products')
@@ -13,7 +13,7 @@ unit_tests:
           - {product_scd_key: 'hash_v1', product_key: 100, dbt_valid_from: 20240101, dbt_valid_to: 20240501}
           # Version mới có hiệu lực tại ngày mua
           - {product_scd_key: 'hash_v2', product_key: 100, dbt_valid_from: 20240501, dbt_valid_to: 99991231}
-      - input: ref('src_cdc_sales')
+      - input: ref('stg_sqlserver__sales_cdc')
         rows: []
     expect:
       rows:

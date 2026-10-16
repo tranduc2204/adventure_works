@@ -10,7 +10,7 @@ with actual_terriories as (
         country,
         continent,
         FALSE AS is_inferred 
-    from {{ ref('src_territories') }}
+    from {{ ref('stg_sqlserver__territories') }}
 )
 , 
 inferred_terriories as (
@@ -22,7 +22,7 @@ inferred_terriories as (
         'N/A' as country, 
         'N/A' as continent,
         TRUE AS is_inferred 
-    from {{ ref('src_sales') }} t
+    from {{ ref('stg_sqlserver__sales') }} t
     where t.territory_key is not null 
         and t.territory_key not in  (select distinct territory_key 
         from actual_terriories

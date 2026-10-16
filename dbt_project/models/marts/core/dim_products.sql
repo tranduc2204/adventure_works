@@ -4,10 +4,10 @@ with snap_product as (
     select * from {{ ref('snap_products') }}
 ),
 SRC_PRODUCT_SUBCATEGORIES as (
-    select * from {{ ref('src_product_subcategories') }}
+    select * from {{ ref('stg_sqlserver__product_subcategories') }}
 ),
 SRC_PRODUCT_CATEGORIES as (
-    select * from {{ ref('src_product_categories') }}  
+    select * from {{ ref('stg_sqlserver__product_categories') }}  
 )
 
 select 

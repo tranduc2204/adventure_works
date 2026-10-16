@@ -1,8 +1,8 @@
 version: 2
 sources:
-  - name: BRONZE
+  - name: raw
     database: ADVENTUREWORKS
-    schema: BRONZE
+    schema: RAW
     description: "Adventure Works is a sample database provided by Microsoft that demonstrates the capabilities of SQL Server and other Microsoft data platform technologies. It contains a fictional company that sells bicycles and related products, and includes various tables and views that represent the company's sales, production, and customer data."
     tables:
       - name: calendar

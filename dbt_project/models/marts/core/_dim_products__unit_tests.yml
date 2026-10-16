@@ -9,9 +9,9 @@ unit_tests:
           - {product_key: 1, product_size: 'M', product_style: 'U'}
           - {product_key: 2, product_size: '48', product_style: '0'}
           - {product_key: 3, product_size: '0', product_style: null}
-      - input: ref('src_product_subcategories')
+      - input: ref('stg_sqlserver__product_subcategories')
         rows: []
-      - input: ref('src_product_categories')
+      - input: ref('stg_sqlserver__product_categories')
         rows: [] 
     expect:
       rows:
