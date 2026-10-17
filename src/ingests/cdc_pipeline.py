@@ -52,7 +52,7 @@ def run_cdc_sync():
     pipeline = dlt.pipeline(
         pipeline_name="sqlserver_cdc_to_snowflake",
         destination="snowflake",
-        dataset_name="BRONZE"
+        dataset_name="RAW"
     )
 
     # In Bronze, CDC records are always appended

@@ -43,7 +43,7 @@ def run_replace_sync():
     pipeline = dlt.pipeline(
         pipeline_name="sqlserver_replace_to_snowflake",
         destination="snowflake",
-        dataset_name="BRONZE"
+        dataset_name="raw"
     )
 
     

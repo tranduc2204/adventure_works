@@ -62,7 +62,7 @@ def run_snapshot():
     pipeline = dlt.pipeline(
         pipeline_name="sqlserver_initial_snapshot",
         destination="snowflake",
-        dataset_name="BRONZE"
+        dataset_name="raw"
     )
 
     # Run pipeline with 'replace' disposition to establish baseline
